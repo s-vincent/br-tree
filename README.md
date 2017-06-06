@@ -31,7 +31,9 @@ For 32-bit and 64-bit:
 * 003-buildroot-ovl-users-devices-ssh.cfg: basic system (ssh, 1 user, special permissions, fstab, load /etc/modules, ...).
 
 For 32-bit only:
+* 003-buildroot-ovl-users-devices-ssh-wifi.cfg: same as 003-buildroot-ovl-users-devices-ssh.cfg but with Wi-Fi support;
 * 004-buildroot-4.8-rt.cfg: same as 003-buildroot-ovl-users-devices-ssh.cfg with a 4.8.y kernel with PREEMPT-RT patch as well as rt-tests and ltp packages;
 * 005-buildroot-uboot-4.8-rt.cfg: same as 004-buildroot-4.8-rt.cfg but with u-boot bootloader;
-* 006-buildroot-4.1-xenomai.cfg: same as 003-buildroot-ovl-users-devices-ssh.cfg with 4.8.y kernel with Xenomai.
+* 005-buildroot-uboot-4.8-rt.cfg: same as 005-buildroot-uboot-4.8-rt.cfg but with Wi-Fi support;
+* 006-buildroot-4.1-xenomai.cfg: same as 003-buildroot-ovl-users-devices-ssh.cfg with 4.1.y kernel with Xenomai.
 
