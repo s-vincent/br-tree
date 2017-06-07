@@ -12,5 +12,5 @@ esac
 grep -q -F 'device_tree=' ${BINARIES_DIR}/rpi-firmware/config.txt || echo 'device_tree=bcm2710-rpi-3-b.dtb' >> ${BINARIES_DIR}/rpi-firmware/config.txt
 grep -q -F 'enable_uart=' ${BINARIES_DIR}/rpi-firmware/config.txt || echo 'enable_uart=1' >> ${BINARIES_DIR}/rpi-firmware/config.txt
 
-sed -i.bak 's/^/dwc_otg.lpm_enable=0 /' ${BINARIES_DIR}/rpi-firmware/cmdline.txt
+grep -q -F 'dwc_otg.lpm_enable=0' ${BINARIES_DIR}/rpi-firmware/cmdline.txt || sed -i.bak 's/^/dwc_otg.lpm_enable=0 /' ${BINARIES_DIR}/rpi-firmware/cmdline.txt
 
