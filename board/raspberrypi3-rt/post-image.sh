@@ -8,9 +8,6 @@ case "${2}" in
   ;; 
 esac
 
-# for xenomai rpi kernel
-mv ${BINARIES_DIR}/bcm2710-rpi-3-b.dtb ${BINARIES_DIR}/bcm2837-rpi-3-b.dtb
-
 grep -q -F 'device_tree_address=' ${BINARIES_DIR}/rpi-firmware/config.txt || echo 'device_tree_address=0x100' >> ${BINARIES_DIR}/rpi-firmware/config.txt
 grep -q -F 'device_tree=' ${BINARIES_DIR}/rpi-firmware/config.txt || echo 'device_tree=bcm2837-rpi-3-b.dtb' >> ${BINARIES_DIR}/rpi-firmware/config.txt
 grep -q -F 'enable_uart=' ${BINARIES_DIR}/rpi-firmware/config.txt || echo 'enable_uart=1' >> ${BINARIES_DIR}/rpi-firmware/config.txt
