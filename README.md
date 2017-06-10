@@ -4,8 +4,8 @@ Buildroot development tree
 ## Boards
 
 Following custom boards are supported:
-- Raspberry Pi 3 64-bit (mainline 4.x kernel);
-- Raspberry Pi 3 32-bit (rpi-4.8.y, rpi-4.8.y-RT and rpi-4.1.y-xenomai kernels).
+- Raspberry Pi 3 64-bit (4.11.x and 4.9.x-RT kernels);
+- Raspberry Pi 3 32-bit (4.11.x, 4.9.x-RT and rpi-4.1.y-ipipe kernels).
 
 ## How to use
 
@@ -29,11 +29,8 @@ Once done, copy a configuration to build a system:
 For 32-bit and 64-bit:
 * 002-minimal.cfg: very minimal system (serial, login, ...);
 * 003-buildroot-ovl-users-devices-ssh.cfg: basic system (ssh, 1 user, special permissions, fstab, load /etc/modules, ...).
+* 004-buildroot-rt.cfg: same as 003-buildroot-ovl-users-devices-ssh.cfg but with a 4.9.x kernel with PREEMPT-RT patch as well as rt-tests and ltp packages;
 
 For 32-bit only:
-* 003-buildroot-ovl-users-devices-ssh-wifi.cfg: same as 003-buildroot-ovl-users-devices-ssh.cfg but with Wi-Fi support;
-* 004-buildroot-4.8-rt.cfg: same as 003-buildroot-ovl-users-devices-ssh.cfg with a 4.8.y kernel with PREEMPT-RT patch as well as rt-tests and ltp packages;
-* 005-buildroot-uboot-4.8-rt.cfg: same as 004-buildroot-4.8-rt.cfg but with u-boot bootloader;
-* 005-buildroot-uboot-4.8-rt.cfg: same as 005-buildroot-uboot-4.8-rt.cfg but with Wi-Fi support;
-* 006-buildroot-4.1-xenomai.cfg: same as 003-buildroot-ovl-users-devices-ssh.cfg with 4.1.y kernel with Xenomai.
+* 005-buildroot-xenomai.cfg: same as 003-buildroot-ovl-users-devices-ssh.cfg but with rpi-4.1.y-ipipe kernel with Xenomai.
 
