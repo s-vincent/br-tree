@@ -1,0 +1,5 @@
+config BR2_PACKAGE_HELLO_GENERIC
+  bool "Generic example"
+  help
+    Hello world generic package
+

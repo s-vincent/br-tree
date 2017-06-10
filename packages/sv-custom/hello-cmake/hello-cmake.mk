@@ -1,0 +1,6 @@
+HELLO_CMAKE_SOURCE = hello-cmake.tar.bz2
+HELLO_CMAKE_SITE = file://$(BR2_EXTERNAL_SV_CUSTOM_PATH)/sources
+HELLO_CMAKE_LICENSE = GPL-3.0+
+HELLO_CMAKE_LICENSE_FILES = LICENSE
+
+$(eval $(cmake-package))

@@ -1,0 +1,18 @@
+HELLO_GENERIC_SOURCE = hello-generic.tar.bz2
+HELLO_GENERIC_SITE = file://$(BR2_EXTERNAL_SV_CUSTOM_PATH)/sources
+HELLO_GENERIC_LICENSE = GPL-3.0+
+HELLO_GENERIC_LICENSE_FILES = LICENSE
+
+define HELLO_GENERIC_BUILD_CMDS
+	$(MAKE) -C $(@D) CC="$(TARGET_CC)" CFLAGS="$(TARGET_CFLAGS)"
+endef
+
+define HELLO_GENERIC_INSTALL_TARGET_CMDS
+	$(MAKE) -C $(@D) install DESTDIR="$(TARGET_DIR)"
+endef
+
+define HELLO_GENERIC_CLEAN_CMDS
+	$(MAKE) -C $(@D) clean
+endef
+
+$(eval $(generic-package))

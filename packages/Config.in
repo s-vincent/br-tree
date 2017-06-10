@@ -1,0 +1,4 @@
+source "$BR2_EXTERNAL_SV_CUSTOM_PATH/sv-custom/hello-autotools/Config.in"
+source "$BR2_EXTERNAL_SV_CUSTOM_PATH/sv-custom/hello-cmake/Config.in"
+source "$BR2_EXTERNAL_SV_CUSTOM_PATH/sv-custom/hello-generic/Config.in"
+source "$BR2_EXTERNAL_SV_CUSTOM_PATH/sv-custom/hello-module/Config.in"
