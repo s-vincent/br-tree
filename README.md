@@ -14,15 +14,23 @@ Untar the buildroot package:
 * cd buildroot-2017.05
 
 Build a toolchain:
-* For 32-bit: cp ../board/raspberrypi3-rt/001-buildroot-toolchain.cfg ./.config && make
+* For 32-bit: cp ../board/raspberrypi3/001-buildroot-toolchain.cfg ./.config && make
 * For 64-bit: cp ../board/raspberrypi3-64/001-buildroot-toolchain.cfg ./.config && make
 
-Note to build a Xenomai system (only for 32-bit), you need a toolchain with 4.1 kernel headers:
-* cp ../board/raspberrypi3-rt/006-buildroot-toolchain-4.1.cfg ./.config && make
+Note: to build a Xenomai system (only for 32-bit), you need a toolchain with 4.1 kernel headers:
+* cp ../board/raspberrypi3/006-buildroot-toolchain-4.1.cfg ./.config && make
 
 Once done, copy a configuration to build a system:
-* Example for 32-bit: cp ../board/raspberrypi3-rt/002-buildroot-minimal.cfg ./.config && make
+* Example for 32-bit: cp ../board/raspberrypi3/002-buildroot-minimal.cfg ./.config && make
 * Example for 64-bit: cp ../board/raspberrypi3-64/002-buildroot-minimal.cfg ./.config && make
+
+Build the system:
+* make
+
+Installation:
+* Partition your SD card with three partitions (for /boot, / and /home) with fdisk;
+* Uses vfat for /boot, ext4 for / and vfat for /home;
+* Be sure your SD card is /dev/mmcblk0 and launch ../scripts/install_sd.sh.
 
 ## Configurations
 
@@ -33,4 +41,8 @@ For 32-bit and 64-bit:
 
 For 32-bit only:
 * 005-buildroot-xenomai.cfg: same as 003-buildroot-ovl-users-devices-ssh.cfg but with rpi-4.1.y-ipipe kernel with Xenomai.
+
+## Links
+
+* https://buildroot.org/downloads/manual/manual.html
 
