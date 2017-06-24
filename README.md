@@ -1,4 +1,4 @@
-# br-tree
+# buildroot-tree
 Buildroot development tree
 
 ## Boards
