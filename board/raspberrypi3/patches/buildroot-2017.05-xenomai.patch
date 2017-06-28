@@ -332,33 +332,3 @@ diff -Nru package/xenomai.orig/xenomai.mk package/xenomai/xenomai.mk
  XENOMAI_CONF_OPTS += --includedir=/usr/include/xenomai/ --disable-doc-install
  
  ifeq ($(BR2_PACKAGE_XENOMAI_MERCURY),y)
-@@ -155,4 +156,29 @@
- XENOMAI_POST_INSTALL_TARGET_HOOKS += XENOMAI_INSTALL_UDEV_RULES
- endif # udev
- 
-+# Configure package for target
-+define XENOMAI_CONFIGURE_CMDS
-+  (cd $(XENOMAI_SRCDIR) && rm -rf config.cache && \
-+  $(TARGET_CONFIGURE_OPTS) \
-+  $(TARGET_CONFIGURE_ARGS) \
-+  $(XENOMAI_CONF_ENV) \
-+  CONFIG_SITE=/dev/null \
-+  ./configure \
-+    --target=$(GNU_TARGET_NAME) \
-+    --host=$(GNU_TARGET_NAME) \
-+    --build=$(GNU_HOST_NAME) \
-+    --prefix=/usr/xenomai \
-+    --exec-prefix=/usr/xenomai \
-+    --sysconfdir=/usr/xenomai/etc \
-+    --localstatedir=/var \
-+    --program-prefix="" \
-+    --disable-doc \
-+    --disable-docs \
-+    --disable-documentation \
-+    $(DISABLE_NLS) \
-+		$(SHARED_STATIC_LIBS_OPTS) \
-+		$(QUIET) $(XENOMAI_CONF_OPTS) \
-+  )   
-+endef
-+
- $(eval $(autotools-package))
