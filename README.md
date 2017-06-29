@@ -4,8 +4,8 @@ Buildroot development tree
 ## Boards
 
 Following custom boards are supported:
-- Raspberry Pi 3 64-bit (4.11.x and 4.9.x-RT kernels);
-- Raspberry Pi 3 32-bit (4.11.x, 4.9.x-RT and rpi-4.1.y-ipipe kernels).
+- Raspberry Pi 3 64-bit (4.11.x, 4.11.x-RT and 4.9.x-RT kernels);
+- Raspberry Pi 3 32-bit (4.11.x, 4.11.x-RT, 4.9.x-RT and rpi-4.1.y-ipipe kernels).
 
 ## How to use
 
