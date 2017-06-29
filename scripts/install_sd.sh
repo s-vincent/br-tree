@@ -1,6 +1,6 @@
 #!/bin/sh
 
-$user=$(whoami)
+user=$(whoami)
 
 sudo tar xf output/images/rootfs.tar -C /media/$user/ROOT/
 cp output/images/bcm2837-rpi-3-b.dtb /media/$user/BOOT/
