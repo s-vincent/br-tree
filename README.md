@@ -12,6 +12,9 @@ Following custom boards are supported:
 Untar the buildroot package:
 * tar -xjvf dl/buildroot-2017.05.tar.bz2
 * cd buildroot-2017.05
+* patch -p1 < board/raspberry3/patches/buildroot-2017.05-genimage.patch
+* patch -p1 < board/raspberry3/patches/buildroot-2017.05-xenomai.patch
+* patch -p1 < board/raspberry3-64/patches/buildroot-2017.05-genimage.patch
 
 Build a toolchain:
 * For 32-bit: cp ../board/raspberrypi3/001-buildroot-toolchain.cfg ./.config && make
