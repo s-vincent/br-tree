@@ -17,22 +17,25 @@ Untar the buildroot package:
 * `patch -p1 < board/raspberry3/patches/buildroot-2017.05-xenomai.patch`
 * `patch -p1 < board/raspberry3-64/patches/buildroot-2017.05-genimage.patch`
 
-Build a toolchain:
-* For 32-bit:
-`cp ../board/raspberrypi3/001-buildroot-toolchain.cfg ./.config && make`
-* For 64-bit:
-`cp ../board/raspberrypi3-64/001-buildroot-toolchain.cfg ./.config && make`
-* For 32-bit Xenomai (needs 4.1 kernel headers):
-`cp ../board/raspberrypi3/006-buildroot-toolchain-4.1.cfg ./.config && make`
+Build a 32-bit toolchain:
+* `cp ../board/raspberrypi3/001-buildroot-toolchain.cfg ./.config && make`
+
+Build a 64-bit toolchain:
+* `cp ../board/raspberrypi3-64/001-buildroot-toolchain.cfg ./.config && make`
+
+Build 32-bit Xenomai toolchain (needs 4.1 kernel headers):
+* `cp ../board/raspberrypi3/006-buildroot-toolchain-4.1.cfg ./.config && make`
 
 Once done, copy a configuration to build a system.
-* Example for 32-bit:
-`cp ../board/raspberrypi3/002-buildroot-minimal.cfg ./.config && make`
-* Example for 64-bit:
-`cp ../board/raspberrypi3-64/002-buildroot-minimal.cfg ./.config && make`
+
+Example for 32-bit:
+* `cp ../board/raspberrypi3/002-buildroot-minimal.cfg ./.config && make`
+
+Example for 64-bit:
+* `cp ../board/raspberrypi3-64/002-buildroot-minimal.cfg ./.config && make`
 
 Build the system:
-`make`
+* `make`
 
 ## Configurations
 
