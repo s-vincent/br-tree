@@ -67,6 +67,7 @@ want for /home.
 Next format your partitions, use vfat for /boot and /home and ext4 for /.
 
 Assuming your SD card is /dev/mmcblk0 (or else change it!):
+
 `sudo mkfs.vfat -n BOOT /dev/mmcblk0p1`
 
 `sudo mkfs.ext4 -L ROOT /dev/mmcblk0p2`
