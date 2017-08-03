@@ -8,6 +8,11 @@ fi
 
 user=$SUDO_USER
 
+if [ -z "$user" ]
+then
+  user=$(whoami)
+fi
+
 tar xf output/images/rootfs.tar -C /media/$user/ROOT/
 cp output/images/bcm2837-rpi-3-b.dtb /media/$user/BOOT/
 cp output/images/Image /media/$user/BOOT/
