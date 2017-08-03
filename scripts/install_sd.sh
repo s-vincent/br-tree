@@ -1,8 +1,14 @@
 #!/bin/sh
 
-user=$(whoami)
+if [ $(id -u) -ne 0 ]                                                           
+then                                                                            
+  echo "Script has to be run as root or sudo"                                   
+  exit 1                                                                        
+fi   
 
-sudo tar xf output/images/rootfs.tar -C /media/$user/ROOT/
+user=$SUDO_USER
+
+tar xf output/images/rootfs.tar -C /media/$user/ROOT/
 cp output/images/bcm2837-rpi-3-b.dtb /media/$user/BOOT/
 cp output/images/Image /media/$user/BOOT/
 cp output/images/zImage /media/$user/BOOT/
