@@ -505,6 +505,21 @@ index cd211a14a88f..c3271b26a2db 100644
  	select RING_BUFFER
  	select RING_BUFFER_ALLOW_SWAP
  	help
+diff --git a/arch/alpha/include/asm/spinlock_types.h b/arch/alpha/include/asm/spinlock_types.h
+index 54c2afce0a1d..8e08a6146dce 100644
+--- a/arch/alpha/include/asm/spinlock_types.h
++++ b/arch/alpha/include/asm/spinlock_types.h
+@@ -1,10 +1,6 @@
+ #ifndef _ALPHA_SPINLOCK_TYPES_H
+ #define _ALPHA_SPINLOCK_TYPES_H
+ 
+-#ifndef __LINUX_SPINLOCK_TYPES_H
+-# error "please don't include this file directly"
+-#endif
+-
+ typedef struct {
+ 	volatile unsigned int lock;
+ } arch_spinlock_t;
 diff --git a/arch/arm/Kconfig b/arch/arm/Kconfig
 index 0d4e71b42c77..09f565fc4669 100644
 --- a/arch/arm/Kconfig
@@ -539,6 +554,21 @@ index e53638c8ed8a..6095a1649865 100644
  struct irqaction;
  struct pt_regs;
  extern void migrate_irqs(void);
+diff --git a/arch/arm/include/asm/spinlock_types.h b/arch/arm/include/asm/spinlock_types.h
+index 47663fcb10ad..45f4f509a431 100644
+--- a/arch/arm/include/asm/spinlock_types.h
++++ b/arch/arm/include/asm/spinlock_types.h
+@@ -1,10 +1,6 @@
+ #ifndef __ASM_SPINLOCK_TYPES_H
+ #define __ASM_SPINLOCK_TYPES_H
+ 
+-#ifndef __LINUX_SPINLOCK_TYPES_H
+-# error "please don't include this file directly"
+-#endif
+-
+ #define TICKET_SHIFT	16
+ 
+ typedef struct {
 diff --git a/arch/arm/include/asm/switch_to.h b/arch/arm/include/asm/switch_to.h
 index 12ebfcc1d539..c962084605bc 100644
 --- a/arch/arm/include/asm/switch_to.h
@@ -686,8 +716,50 @@ index eb5cd77bf1d8..794cba074cf0 100644
   UNWIND(.fnend		)
  ENDPROC(ret_fast_syscall)
  
+diff --git a/arch/arm/kernel/hw_breakpoint.c b/arch/arm/kernel/hw_breakpoint.c
+index be3b3fbd382f..63cb4c7c6593 100644
+--- a/arch/arm/kernel/hw_breakpoint.c
++++ b/arch/arm/kernel/hw_breakpoint.c
+@@ -1090,7 +1090,7 @@ static int __init arch_hw_breakpoint_init(void)
+ 	 * driven low on this core and there isn't an architected way to
+ 	 * determine that.
+ 	 */
+-	get_online_cpus();
++	cpus_read_lock();
+ 	register_undef_hook(&debug_reg_hook);
+ 
+ 	/*
+@@ -1098,15 +1098,16 @@ static int __init arch_hw_breakpoint_init(void)
+ 	 * assume that a halting debugger will leave the world in a nice state
+ 	 * for us.
+ 	 */
+-	ret = cpuhp_setup_state(CPUHP_AP_ONLINE_DYN, "arm/hw_breakpoint:online",
+-				dbg_reset_online, NULL);
++	ret = cpuhp_setup_state_cpuslocked(CPUHP_AP_ONLINE_DYN,
++					   "arm/hw_breakpoint:online",
++					   dbg_reset_online, NULL);
+ 	unregister_undef_hook(&debug_reg_hook);
+ 	if (WARN_ON(ret < 0) || !cpumask_empty(&debug_err_mask)) {
+ 		core_num_brps = 0;
+ 		core_num_wrps = 0;
+ 		if (ret > 0)
+ 			cpuhp_remove_state_nocalls(ret);
+-		put_online_cpus();
++		cpus_read_unlock();
+ 		return 0;
+ 	}
+ 
+@@ -1124,7 +1125,7 @@ static int __init arch_hw_breakpoint_init(void)
+ 			TRAP_HWBKPT, "watchpoint debug exception");
+ 	hook_ifault_code(FAULT_CODE_DEBUG, hw_breakpoint_pending, SIGTRAP,
+ 			TRAP_HWBKPT, "breakpoint debug exception");
+-	put_online_cpus();
++	cpus_read_unlock();
+ 
+ 	/* Register PM notifiers. */
+ 	pm_init();
 diff --git a/arch/arm/kernel/patch.c b/arch/arm/kernel/patch.c
-index 020560b2dcb7..0297e0f6f948 100644
+index 020560b2dcb7..dbea1ea7a365 100644
 --- a/arch/arm/kernel/patch.c
 +++ b/arch/arm/kernel/patch.c
 @@ -15,7 +15,7 @@ struct patch {
@@ -716,6 +788,13 @@ index 020560b2dcb7..0297e0f6f948 100644
 +		raw_spin_unlock_irqrestore(&patch_lock, *flags);
  	else
  		__release(&patch_lock);
+ }
+@@ -124,5 +124,5 @@ void __kprobes patch_text(void *addr, unsigned int insn)
+ 		.insn = insn,
+ 	};
+ 
+-	stop_machine(patch_text_stop_machine, &patch, NULL);
++	stop_machine_cpuslocked(patch_text_stop_machine, &patch, NULL);
  }
 diff --git a/arch/arm/kernel/process.c b/arch/arm/kernel/process.c
 index 939e8b58c59d..3a3e715e870b 100644
@@ -1433,6 +1512,20 @@ index c2366510187a..6b60f582b738 100644
  
  	return pen_release != -1 ? -ENOSYS : 0;
  }
+diff --git a/arch/arm/probes/kprobes/core.c b/arch/arm/probes/kprobes/core.c
+index ad1f4e6a9e33..52d1cd14fda4 100644
+--- a/arch/arm/probes/kprobes/core.c
++++ b/arch/arm/probes/kprobes/core.c
+@@ -182,7 +182,8 @@ void __kprobes kprobes_remove_breakpoint(void *addr, unsigned int insn)
+ 		.addr = addr,
+ 		.insn = insn,
+ 	};
+-	stop_machine(__kprobes_remove_breakpoint, &p, cpu_online_mask);
++	stop_machine_cpuslocked(__kprobes_remove_breakpoint, &p,
++				cpu_online_mask);
+ }
+ 
+ void __kprobes arch_disarm_kprobe(struct kprobe *p)
 diff --git a/arch/arm64/Kconfig b/arch/arm64/Kconfig
 index 3741859765cf..597e479f54ad 100644
 --- a/arch/arm64/Kconfig
@@ -1498,6 +1591,18 @@ index f31c48d0cd68..aba574c43d2f 100644
  	}
  }
  
+diff --git a/arch/arm64/include/asm/insn.h b/arch/arm64/include/asm/insn.h
+index aecc07e09a18..742d7086cd66 100644
+--- a/arch/arm64/include/asm/insn.h
++++ b/arch/arm64/include/asm/insn.h
+@@ -403,7 +403,6 @@ u32 aarch64_set_branch_offset(u32 insn, s32 offset);
+ bool aarch64_insn_hotpatch_safe(u32 old_insn, u32 new_insn);
+ 
+ int aarch64_insn_patch_text_nosync(void *addr, u32 insn);
+-int aarch64_insn_patch_text_sync(void *addrs[], u32 insns[], int cnt);
+ int aarch64_insn_patch_text(void *addrs[], u32 insns[], int cnt);
+ 
+ s32 aarch64_insn_adrp_get_offset(u32 insn);
 diff --git a/arch/arm64/include/asm/kvm_host.h b/arch/arm64/include/asm/kvm_host.h
 index e7705e7bb07b..9973f0af43d2 100644
 --- a/arch/arm64/include/asm/kvm_host.h
@@ -1525,6 +1630,21 @@ index e7705e7bb07b..9973f0af43d2 100644
  	__kvm_call_hyp((void *)pgd_ptr, hyp_stack_ptr, vector_ptr);
  }
  
+diff --git a/arch/arm64/include/asm/spinlock_types.h b/arch/arm64/include/asm/spinlock_types.h
+index 55be59a35e3f..ba0cf1361f65 100644
+--- a/arch/arm64/include/asm/spinlock_types.h
++++ b/arch/arm64/include/asm/spinlock_types.h
+@@ -16,10 +16,6 @@
+ #ifndef __ASM_SPINLOCK_TYPES_H
+ #define __ASM_SPINLOCK_TYPES_H
+ 
+-#if !defined(__LINUX_SPINLOCK_TYPES_H) && !defined(__ASM_SPINLOCK_H)
+-# error "please don't include this file directly"
+-#endif
+-
+ #include <linux/types.h>
+ 
+ #define TICKET_SHIFT	16
 diff --git a/arch/arm64/include/asm/thread_info.h b/arch/arm64/include/asm/thread_info.h
 index 46c3b93cf865..205f2f2a277b 100644
 --- a/arch/arm64/include/asm/thread_info.h
@@ -1663,6 +1783,29 @@ index b738880350f9..510e80679caa 100644
  	ret	x24
  #endif
  
+diff --git a/arch/arm64/kernel/insn.c b/arch/arm64/kernel/insn.c
+index 3a63954a8b14..42aac8937b41 100644
+--- a/arch/arm64/kernel/insn.c
++++ b/arch/arm64/kernel/insn.c
+@@ -255,6 +255,7 @@ static int __kprobes aarch64_insn_patch_text_cb(void *arg)
+ 	return ret;
+ }
+ 
++static
+ int __kprobes aarch64_insn_patch_text_sync(void *addrs[], u32 insns[], int cnt)
+ {
+ 	struct aarch64_insn_patch patch = {
+@@ -267,8 +268,8 @@ int __kprobes aarch64_insn_patch_text_sync(void *addrs[], u32 insns[], int cnt)
+ 	if (cnt <= 0)
+ 		return -EINVAL;
+ 
+-	return stop_machine(aarch64_insn_patch_text_cb, &patch,
+-			    cpu_online_mask);
++	return stop_machine_cpuslocked(aarch64_insn_patch_text_cb, &patch,
++				       cpu_online_mask);
+ }
+ 
+ int __kprobes aarch64_insn_patch_text(void *addrs[], u32 insns[], int cnt)
 diff --git a/arch/arm64/kernel/signal.c b/arch/arm64/kernel/signal.c
 index c7b6de62f9d3..cdbe7af80641 100644
 --- a/arch/arm64/kernel/signal.c
@@ -1690,6 +1833,51 @@ index 9b1036570586..b5d9366506c3 100644
  			pr_crit("SMP: stopping secondary CPUs\n");
  		smp_cross_call(&mask, IPI_CPU_STOP);
  	}
+diff --git a/arch/blackfin/include/asm/spinlock_types.h b/arch/blackfin/include/asm/spinlock_types.h
+index 1a33608c958b..103b34d3dcf6 100644
+--- a/arch/blackfin/include/asm/spinlock_types.h
++++ b/arch/blackfin/include/asm/spinlock_types.h
+@@ -7,10 +7,6 @@
+ #ifndef __ASM_SPINLOCK_TYPES_H
+ #define __ASM_SPINLOCK_TYPES_H
+ 
+-#ifndef __LINUX_SPINLOCK_TYPES_H
+-# error "please don't include this file directly"
+-#endif
+-
+ #include <asm/rwlock.h>
+ 
+ typedef struct {
+diff --git a/arch/hexagon/include/asm/spinlock_types.h b/arch/hexagon/include/asm/spinlock_types.h
+index 7a906b5214a4..d8f596fec022 100644
+--- a/arch/hexagon/include/asm/spinlock_types.h
++++ b/arch/hexagon/include/asm/spinlock_types.h
+@@ -21,10 +21,6 @@
+ #ifndef _ASM_SPINLOCK_TYPES_H
+ #define _ASM_SPINLOCK_TYPES_H
+ 
+-#ifndef __LINUX_SPINLOCK_TYPES_H
+-# error "please don't include this file directly"
+-#endif
+-
+ typedef struct {
+ 	volatile unsigned int lock;
+ } arch_spinlock_t;
+diff --git a/arch/ia64/include/asm/spinlock_types.h b/arch/ia64/include/asm/spinlock_types.h
+index e2b42a52a6d3..0a511f277107 100644
+--- a/arch/ia64/include/asm/spinlock_types.h
++++ b/arch/ia64/include/asm/spinlock_types.h
+@@ -1,10 +1,6 @@
+ #ifndef _ASM_IA64_SPINLOCK_TYPES_H
+ #define _ASM_IA64_SPINLOCK_TYPES_H
+ 
+-#ifndef __LINUX_SPINLOCK_TYPES_H
+-# error "please don't include this file directly"
+-#endif
+-
+ typedef struct {
+ 	volatile unsigned int lock;
+ } arch_spinlock_t;
 diff --git a/arch/ia64/kernel/mca.c b/arch/ia64/kernel/mca.c
 index 79c7c46d7dc1..f5f116e1a504 100644
 --- a/arch/ia64/kernel/mca.c
@@ -1859,6 +2047,36 @@ index 52704f199dd6..55febd65911a 100644
  		}
  	}
  	r = op_info->ret;
+diff --git a/arch/m32r/include/asm/spinlock_types.h b/arch/m32r/include/asm/spinlock_types.h
+index 92e27672661f..4be1eaef684c 100644
+--- a/arch/m32r/include/asm/spinlock_types.h
++++ b/arch/m32r/include/asm/spinlock_types.h
+@@ -1,10 +1,6 @@
+ #ifndef _ASM_M32R_SPINLOCK_TYPES_H
+ #define _ASM_M32R_SPINLOCK_TYPES_H
+ 
+-#ifndef __LINUX_SPINLOCK_TYPES_H
+-# error "please don't include this file directly"
+-#endif
+-
+ typedef struct {
+ 	volatile int slock;
+ } arch_spinlock_t;
+diff --git a/arch/metag/include/asm/spinlock_types.h b/arch/metag/include/asm/spinlock_types.h
+index b76391405fea..7c4ed51345b6 100644
+--- a/arch/metag/include/asm/spinlock_types.h
++++ b/arch/metag/include/asm/spinlock_types.h
+@@ -1,10 +1,6 @@
+ #ifndef _ASM_METAG_SPINLOCK_TYPES_H
+ #define _ASM_METAG_SPINLOCK_TYPES_H
+ 
+-#ifndef __LINUX_SPINLOCK_TYPES_H
+-# error "please don't include this file directly"
+-#endif
+-
+ typedef struct {
+ 	volatile unsigned int lock;
+ } arch_spinlock_t;
 diff --git a/arch/metag/kernel/smp.c b/arch/metag/kernel/smp.c
 index 232a12bf3f99..2dbbb7c66043 100644
 --- a/arch/metag/kernel/smp.c
@@ -1886,6 +2104,21 @@ index c3c7d8aa3283..4227fb0b29e9 100644
  
  config CPU_SUPPORTS_HIGHMEM
  	bool
+diff --git a/arch/mips/include/asm/spinlock_types.h b/arch/mips/include/asm/spinlock_types.h
+index 9b2528e612c0..ba8def153b8c 100644
+--- a/arch/mips/include/asm/spinlock_types.h
++++ b/arch/mips/include/asm/spinlock_types.h
+@@ -1,10 +1,6 @@
+ #ifndef _ASM_SPINLOCK_TYPES_H
+ #define _ASM_SPINLOCK_TYPES_H
+ 
+-#ifndef __LINUX_SPINLOCK_TYPES_H
+-# error "please don't include this file directly"
+-#endif
+-
+ #include <linux/types.h>
+ 
+ #include <asm/byteorder.h>
 diff --git a/arch/mips/include/asm/switch_to.h b/arch/mips/include/asm/switch_to.h
 index e610473d61b8..1428b4febbc9 100644
 --- a/arch/mips/include/asm/switch_to.h
@@ -1908,6 +2141,26 @@ index e610473d61b8..1428b4febbc9 100644
  	}								\
  	next->thread.emulated_fp = 0;					\
  } while(0)
+diff --git a/arch/mips/kernel/jump_label.c b/arch/mips/kernel/jump_label.c
+index 3e586daa3a32..32e3168316cd 100644
+--- a/arch/mips/kernel/jump_label.c
++++ b/arch/mips/kernel/jump_label.c
+@@ -58,7 +58,6 @@ void arch_jump_label_transform(struct jump_entry *e,
+ 		insn.word = 0; /* nop */
+ 	}
+ 
+-	get_online_cpus();
+ 	mutex_lock(&text_mutex);
+ 	if (IS_ENABLED(CONFIG_CPU_MICROMIPS)) {
+ 		insn_p->halfword[0] = insn.word >> 16;
+@@ -70,7 +69,6 @@ void arch_jump_label_transform(struct jump_entry *e,
+ 			   (unsigned long)insn_p + sizeof(*insn_p));
+ 
+ 	mutex_unlock(&text_mutex);
+-	put_online_cpus();
+ }
+ 
+ #endif /* HAVE_JUMP_LABEL */
 diff --git a/arch/mips/kernel/mips-mt-fpaff.c b/arch/mips/kernel/mips-mt-fpaff.c
 index 8cab633e0e5a..f64555ea9068 100644
 --- a/arch/mips/kernel/mips-mt-fpaff.c
@@ -1941,6 +2194,21 @@ index 0b675023b9c6..46ae37bb5364 100644
  				    &mt_fpu_cpumask);
  			set_cpus_allowed_ptr(current, &tmask);
  			set_thread_flag(TIF_FPUBOUND);
+diff --git a/arch/mn10300/include/asm/spinlock_types.h b/arch/mn10300/include/asm/spinlock_types.h
+index 653dc519b405..b3c3c9a5c906 100644
+--- a/arch/mn10300/include/asm/spinlock_types.h
++++ b/arch/mn10300/include/asm/spinlock_types.h
+@@ -1,10 +1,6 @@
+ #ifndef _ASM_SPINLOCK_TYPES_H
+ #define _ASM_SPINLOCK_TYPES_H
+ 
+-#ifndef __LINUX_SPINLOCK_TYPES_H
+-# error "please don't include this file directly"
+-#endif
+-
+ typedef struct arch_spinlock {
+ 	unsigned int slock;
+ } arch_spinlock_t;
 diff --git a/arch/powerpc/Kconfig b/arch/powerpc/Kconfig
 index 97a8bc8a095c..bae23bd599b5 100644
 --- a/arch/powerpc/Kconfig
@@ -1975,6 +2243,21 @@ index 97a8bc8a095c..bae23bd599b5 100644
  
  source kernel/Kconfig.hz
  source kernel/Kconfig.preempt
+diff --git a/arch/powerpc/include/asm/spinlock_types.h b/arch/powerpc/include/asm/spinlock_types.h
+index 2351adc4fdc4..e24b225bab55 100644
+--- a/arch/powerpc/include/asm/spinlock_types.h
++++ b/arch/powerpc/include/asm/spinlock_types.h
+@@ -1,10 +1,6 @@
+ #ifndef _ASM_POWERPC_SPINLOCK_TYPES_H
+ #define _ASM_POWERPC_SPINLOCK_TYPES_H
+ 
+-#ifndef __LINUX_SPINLOCK_TYPES_H
+-# error "please don't include this file directly"
+-#endif
+-
+ typedef struct {
+ 	volatile unsigned int slock;
+ } arch_spinlock_t;
 diff --git a/arch/powerpc/include/asm/thread_info.h b/arch/powerpc/include/asm/thread_info.h
 index 87e4b2d8dcd4..981e501a4359 100644
 --- a/arch/powerpc/include/asm/thread_info.h
@@ -2174,7 +2457,7 @@ index 84db14e435f5..17d004c11f5c 100644
  /*
   * void call_do_irq(struct pt_regs *regs, struct thread_info *irqtp);
 diff --git a/arch/powerpc/kernel/misc_64.S b/arch/powerpc/kernel/misc_64.S
-index c119044cad0d..47758c00ce88 100644
+index 8ac0bd2bddb0..30832efa1962 100644
 --- a/arch/powerpc/kernel/misc_64.S
 +++ b/arch/powerpc/kernel/misc_64.S
 @@ -31,6 +31,7 @@
@@ -2262,6 +2545,43 @@ index 029be26b5a17..9528089ea142 100644
  	select HAVE_KVM_IRQCHIP
  	select HAVE_KVM_IRQFD
  	select HAVE_KVM_IRQ_ROUTING
+diff --git a/arch/powerpc/kvm/book3s_hv.c b/arch/powerpc/kvm/book3s_hv.c
+index e6a94bd2b158..5405501a8a93 100644
+--- a/arch/powerpc/kvm/book3s_hv.c
++++ b/arch/powerpc/kvm/book3s_hv.c
+@@ -3359,7 +3359,7 @@ void kvmppc_alloc_host_rm_ops(void)
+ 		return;
+ 	}
+ 
+-	get_online_cpus();
++	cpus_read_lock();
+ 
+ 	for (cpu = 0; cpu < nr_cpu_ids; cpu += threads_per_core) {
+ 		if (!cpu_online(cpu))
+@@ -3381,17 +3381,17 @@ void kvmppc_alloc_host_rm_ops(void)
+ 	l_ops = (unsigned long) ops;
+ 
+ 	if (cmpxchg64((unsigned long *)&kvmppc_host_rm_ops_hv, 0, l_ops)) {
+-		put_online_cpus();
++		cpus_read_unlock();
+ 		kfree(ops->rm_core);
+ 		kfree(ops);
+ 		return;
+ 	}
+ 
+-	cpuhp_setup_state_nocalls(CPUHP_KVM_PPC_BOOK3S_PREPARE,
+-				  "ppc/kvm_book3s:prepare",
+-				  kvmppc_set_host_core,
+-				  kvmppc_clear_host_core);
+-	put_online_cpus();
++	cpuhp_setup_state_nocalls_cpuslocked(CPUHP_KVM_PPC_BOOK3S_PREPARE,
++					     "ppc/kvm_book3s:prepare",
++					     kvmppc_set_host_core,
++					     kvmppc_clear_host_core);
++	cpus_read_unlock();
+ }
+ 
+ void kvmppc_free_host_rm_ops(void)
 diff --git a/arch/powerpc/platforms/cell/spufs/sched.c b/arch/powerpc/platforms/cell/spufs/sched.c
 index 1fbb5da17dd2..ca86366d5424 100644
 --- a/arch/powerpc/platforms/cell/spufs/sched.c
@@ -2275,6 +2595,32 @@ index 1fbb5da17dd2..ca86366d5424 100644
  
  	/* Save the current cpu id for spu interrupt routing. */
  	ctx->last_ran = raw_smp_processor_id();
+diff --git a/arch/powerpc/platforms/powernv/subcore.c b/arch/powerpc/platforms/powernv/subcore.c
+index 0babef11136f..e6230f104dd9 100644
+--- a/arch/powerpc/platforms/powernv/subcore.c
++++ b/arch/powerpc/platforms/powernv/subcore.c
+@@ -348,7 +348,7 @@ static int set_subcores_per_core(int new_mode)
+ 		state->master = 0;
+ 	}
+ 
+-	get_online_cpus();
++	cpus_read_lock();
+ 
+ 	/* This cpu will update the globals before exiting stop machine */
+ 	this_cpu_ptr(&split_state)->master = 1;
+@@ -356,9 +356,10 @@ static int set_subcores_per_core(int new_mode)
+ 	/* Ensure state is consistent before we call the other cpus */
+ 	mb();
+ 
+-	stop_machine(cpu_update_split_mode, &new_mode, cpu_online_mask);
++	stop_machine_cpuslocked(cpu_update_split_mode, &new_mode,
++				cpu_online_mask);
+ 
+-	put_online_cpus();
++	cpus_read_unlock();
+ 
+ 	return 0;
+ }
 diff --git a/arch/powerpc/platforms/ps3/device-init.c b/arch/powerpc/platforms/ps3/device-init.c
 index e48462447ff0..2670cee66064 100644
 --- a/arch/powerpc/platforms/ps3/device-init.c
@@ -2288,6 +2634,89 @@ index e48462447ff0..2670cee66064 100644
  				       dev->done.done || kthread_should_stop());
  	if (kthread_should_stop())
  		res = -EINTR;
+diff --git a/arch/s390/include/asm/spinlock_types.h b/arch/s390/include/asm/spinlock_types.h
+index d84b6939237c..ab94fdfd046e 100644
+--- a/arch/s390/include/asm/spinlock_types.h
++++ b/arch/s390/include/asm/spinlock_types.h
+@@ -1,10 +1,6 @@
+ #ifndef __ASM_SPINLOCK_TYPES_H
+ #define __ASM_SPINLOCK_TYPES_H
+ 
+-#ifndef __LINUX_SPINLOCK_TYPES_H
+-# error "please don't include this file directly"
+-#endif
+-
+ typedef struct {
+ 	unsigned int lock;
+ } __attribute__ ((aligned (4))) arch_spinlock_t;
+diff --git a/arch/s390/kernel/jump_label.c b/arch/s390/kernel/jump_label.c
+index 6aa630a8d24f..262506cee4c3 100644
+--- a/arch/s390/kernel/jump_label.c
++++ b/arch/s390/kernel/jump_label.c
+@@ -93,7 +93,7 @@ void arch_jump_label_transform(struct jump_entry *entry,
+ 	args.entry = entry;
+ 	args.type = type;
+ 
+-	stop_machine(__sm_arch_jump_label_transform, &args, NULL);
++	stop_machine_cpuslocked(__sm_arch_jump_label_transform, &args, NULL);
+ }
+ 
+ void arch_jump_label_transform_static(struct jump_entry *entry,
+diff --git a/arch/s390/kernel/kprobes.c b/arch/s390/kernel/kprobes.c
+index 76f9eda1d7c0..42d608da3e0d 100644
+--- a/arch/s390/kernel/kprobes.c
++++ b/arch/s390/kernel/kprobes.c
+@@ -196,7 +196,7 @@ void arch_arm_kprobe(struct kprobe *p)
+ {
+ 	struct swap_insn_args args = {.p = p, .arm_kprobe = 1};
+ 
+-	stop_machine(swap_instruction, &args, NULL);
++	stop_machine_cpuslocked(swap_instruction, &args, NULL);
+ }
+ NOKPROBE_SYMBOL(arch_arm_kprobe);
+ 
+@@ -204,7 +204,7 @@ void arch_disarm_kprobe(struct kprobe *p)
+ {
+ 	struct swap_insn_args args = {.p = p, .arm_kprobe = 0};
+ 
+-	stop_machine(swap_instruction, &args, NULL);
++	stop_machine_cpuslocked(swap_instruction, &args, NULL);
+ }
+ NOKPROBE_SYMBOL(arch_disarm_kprobe);
+ 
+diff --git a/arch/s390/kernel/time.c b/arch/s390/kernel/time.c
+index c31da46bc037..63bd089a9773 100644
+--- a/arch/s390/kernel/time.c
++++ b/arch/s390/kernel/time.c
+@@ -634,10 +634,10 @@ static void stp_work_fn(struct work_struct *work)
+ 		goto out_unlock;
+ 
+ 	memset(&stp_sync, 0, sizeof(stp_sync));
+-	get_online_cpus();
++	cpus_read_lock();
+ 	atomic_set(&stp_sync.cpus, num_online_cpus() - 1);
+-	stop_machine(stp_sync_clock, &stp_sync, cpu_online_mask);
+-	put_online_cpus();
++	stop_machine_cpuslocked(stp_sync_clock, &stp_sync, cpu_online_mask);
++	cpus_read_unlock();
+ 
+ 	if (!check_sync_clock())
+ 		/*
+diff --git a/arch/sh/include/asm/spinlock_types.h b/arch/sh/include/asm/spinlock_types.h
+index 9b7560db06ca..01e48095fb40 100644
+--- a/arch/sh/include/asm/spinlock_types.h
++++ b/arch/sh/include/asm/spinlock_types.h
+@@ -1,10 +1,6 @@
+ #ifndef __ASM_SH_SPINLOCK_TYPES_H
+ #define __ASM_SH_SPINLOCK_TYPES_H
+ 
+-#ifndef __LINUX_SPINLOCK_TYPES_H
+-# error "please don't include this file directly"
+-#endif
+-
+ typedef struct {
+ 	volatile unsigned int lock;
+ } arch_spinlock_t;
 diff --git a/arch/sh/kernel/irq.c b/arch/sh/kernel/irq.c
 index 04487e8fc9b1..f65d715ce11c 100644
 --- a/arch/sh/kernel/irq.c
@@ -2327,6 +2756,21 @@ index 1384d4c9764b..6bee74c9609c 100644
  
  config GENERIC_HWEIGHT
  	bool
+diff --git a/arch/sparc/include/asm/spinlock_types.h b/arch/sparc/include/asm/spinlock_types.h
+index 9c454fdeaad8..019c0855bf8b 100644
+--- a/arch/sparc/include/asm/spinlock_types.h
++++ b/arch/sparc/include/asm/spinlock_types.h
+@@ -1,10 +1,6 @@
+ #ifndef __SPARC_SPINLOCK_TYPES_H
+ #define __SPARC_SPINLOCK_TYPES_H
+ 
+-#ifndef __LINUX_SPINLOCK_TYPES_H
+-# error "please don't include this file directly"
+-#endif
+-
+ typedef struct {
+ 	volatile unsigned char lock;
+ } arch_spinlock_t;
 diff --git a/arch/sparc/kernel/irq_64.c b/arch/sparc/kernel/irq_64.c
 index 99dd133a029f..e1722f1a2042 100644
 --- a/arch/sparc/kernel/irq_64.c
@@ -2347,6 +2791,23 @@ index 99dd133a029f..e1722f1a2042 100644
  
  #ifdef CONFIG_HOTPLUG_CPU
  void fixup_irqs(void)
+diff --git a/arch/sparc/kernel/jump_label.c b/arch/sparc/kernel/jump_label.c
+index 07933b9e9ce0..93adde1ac166 100644
+--- a/arch/sparc/kernel/jump_label.c
++++ b/arch/sparc/kernel/jump_label.c
+@@ -41,12 +41,10 @@ void arch_jump_label_transform(struct jump_entry *entry,
+ 		val = 0x01000000;
+ 	}
+ 
+-	get_online_cpus();
+ 	mutex_lock(&text_mutex);
+ 	*insn = val;
+ 	flushi(insn);
+ 	mutex_unlock(&text_mutex);
+-	put_online_cpus();
+ }
+ 
+ #endif
 diff --git a/arch/sparc/kernel/sysfs.c b/arch/sparc/kernel/sysfs.c
 index d63fc613e7a9..5fd352b759af 100644
 --- a/arch/sparc/kernel/sysfs.c
@@ -2437,6 +2898,21 @@ index 2a0347af0702..670fa2f4cfc3 100644
  		hardwall_deactivate_all(p); \
  } while (0)
  #endif
+diff --git a/arch/tile/include/asm/spinlock_types.h b/arch/tile/include/asm/spinlock_types.h
+index a71f59b49c50..9311c6ff2abc 100644
+--- a/arch/tile/include/asm/spinlock_types.h
++++ b/arch/tile/include/asm/spinlock_types.h
+@@ -15,10 +15,6 @@
+ #ifndef _ASM_TILE_SPINLOCK_TYPES_H
+ #define _ASM_TILE_SPINLOCK_TYPES_H
+ 
+-#ifndef __LINUX_SPINLOCK_TYPES_H
+-# error "please don't include this file directly"
+-#endif
+-
+ #ifdef __tilegx__
+ 
+ /* Low 15 bits are "next"; high 15 bits are "current". */
 diff --git a/arch/tile/kernel/hardwall.c b/arch/tile/kernel/hardwall.c
 index 2fd1694ac1d0..98f4fb696289 100644
 --- a/arch/tile/kernel/hardwall.c
@@ -2477,6 +2953,25 @@ index 2fd1694ac1d0..98f4fb696289 100644
  		BUG();
  	}
  
+diff --git a/arch/tile/kernel/jump_label.c b/arch/tile/kernel/jump_label.c
+index 07802d586988..93931a46625b 100644
+--- a/arch/tile/kernel/jump_label.c
++++ b/arch/tile/kernel/jump_label.c
+@@ -45,14 +45,12 @@ static void __jump_label_transform(struct jump_entry *e,
+ void arch_jump_label_transform(struct jump_entry *e,
+ 				enum jump_label_type type)
+ {
+-	get_online_cpus();
+ 	mutex_lock(&text_mutex);
+ 
+ 	__jump_label_transform(e, type);
+ 	flush_icache_range(e->code, e->code + sizeof(tilegx_bundle_bits));
+ 
+ 	mutex_unlock(&text_mutex);
+-	put_online_cpus();
+ }
+ 
+ __init_or_module void arch_jump_label_transform_static(struct jump_entry *e,
 diff --git a/arch/x86/Kconfig b/arch/x86/Kconfig
 index cc98d5a294ee..bedad1830c7a 100644
 --- a/arch/x86/Kconfig
@@ -2913,6 +3408,97 @@ index 5b219707c2f2..19fd06d85228 100644
  
  #ifdef CONFIG_XEN
  idtentry xen_hypervisor_callback xen_do_hypervisor_callback has_error_code=0
+diff --git a/arch/x86/events/core.c b/arch/x86/events/core.c
+index 580b60f5ac83..ac650d57ebf7 100644
+--- a/arch/x86/events/core.c
++++ b/arch/x86/events/core.c
+@@ -2224,7 +2224,6 @@ void perf_check_microcode(void)
+ 	if (x86_pmu.check_microcode)
+ 		x86_pmu.check_microcode();
+ }
+-EXPORT_SYMBOL_GPL(perf_check_microcode);
+ 
+ static struct pmu pmu = {
+ 	.pmu_enable		= x86_pmu_enable,
+diff --git a/arch/x86/events/intel/core.c b/arch/x86/events/intel/core.c
+index 78da7b646cd0..afb8098d5007 100644
+--- a/arch/x86/events/intel/core.c
++++ b/arch/x86/events/intel/core.c
+@@ -3389,12 +3389,10 @@ static void intel_snb_check_microcode(void)
+ 	int pebs_broken = 0;
+ 	int cpu;
+ 
+-	get_online_cpus();
+ 	for_each_online_cpu(cpu) {
+ 		if ((pebs_broken = intel_snb_pebs_broken(cpu)))
+ 			break;
+ 	}
+-	put_online_cpus();
+ 
+ 	if (pebs_broken == x86_pmu.pebs_broken)
+ 		return;
+@@ -3467,7 +3465,9 @@ static bool check_msr(unsigned long msr, u64 mask)
+ static __init void intel_sandybridge_quirk(void)
+ {
+ 	x86_pmu.check_microcode = intel_snb_check_microcode;
++	cpus_read_lock();
+ 	intel_snb_check_microcode();
++	cpus_read_unlock();
+ }
+ 
+ static const struct { int id; char *name; } intel_arch_events_map[] __initconst = {
+@@ -4090,13 +4090,12 @@ static __init int fixup_ht_bug(void)
+ 
+ 	lockup_detector_resume();
+ 
+-	get_online_cpus();
++	cpus_read_lock();
+ 
+-	for_each_online_cpu(c) {
++	for_each_online_cpu(c)
+ 		free_excl_cntrs(c);
+-	}
+ 
+-	put_online_cpus();
++	cpus_read_unlock();
+ 	pr_info("PMU erratum BJ122, BV98, HSD29 workaround disabled, HT off\n");
+ 	return 0;
+ }
+diff --git a/arch/x86/events/intel/cqm.c b/arch/x86/events/intel/cqm.c
+index 8c00dc09a5d2..2521f771f2f5 100644
+--- a/arch/x86/events/intel/cqm.c
++++ b/arch/x86/events/intel/cqm.c
+@@ -1682,7 +1682,7 @@ static int __init intel_cqm_init(void)
+ 	 *
+ 	 * Also, check that the scales match on all cpus.
+ 	 */
+-	get_online_cpus();
++	cpus_read_lock();
+ 	for_each_online_cpu(cpu) {
+ 		struct cpuinfo_x86 *c = &cpu_data(cpu);
+ 
+@@ -1746,14 +1746,14 @@ static int __init intel_cqm_init(void)
+ 	 * Setup the hot cpu notifier once we are sure cqm
+ 	 * is enabled to avoid notifier leak.
+ 	 */
+-	cpuhp_setup_state(CPUHP_AP_PERF_X86_CQM_STARTING,
+-			  "perf/x86/cqm:starting",
+-			  intel_cqm_cpu_starting, NULL);
+-	cpuhp_setup_state(CPUHP_AP_PERF_X86_CQM_ONLINE, "perf/x86/cqm:online",
+-			  NULL, intel_cqm_cpu_exit);
+-
++	cpuhp_setup_state_cpuslocked(CPUHP_AP_PERF_X86_CQM_STARTING,
++				     "perf/x86/cqm:starting",
++				     intel_cqm_cpu_starting, NULL);
++	cpuhp_setup_state_cpuslocked(CPUHP_AP_PERF_X86_CQM_ONLINE,
++				     "perf/x86/cqm:online",
++				     NULL, intel_cqm_cpu_exit);
+ out:
+-	put_online_cpus();
++	cpus_read_unlock();
+ 
+ 	if (ret) {
+ 		kfree(str);
 diff --git a/arch/x86/include/asm/preempt.h b/arch/x86/include/asm/preempt.h
 index ec1f3c651150..d9cd82a824a6 100644
 --- a/arch/x86/include/asm/preempt.h
@@ -3375,6 +3961,21 @@ index 104cda1f9073..8c38ed2bf5ea 100644
  	if (!zalloc_cpumask_var(&mce_device_initialized, GFP_KERNEL)) {
  		err = -ENOMEM;
  		goto err_out;
+diff --git a/arch/x86/kernel/cpu/mtrr/main.c b/arch/x86/kernel/cpu/mtrr/main.c
+index 24e87e74990d..8fd1f8d4a37c 100644
+--- a/arch/x86/kernel/cpu/mtrr/main.c
++++ b/arch/x86/kernel/cpu/mtrr/main.c
+@@ -807,10 +807,8 @@ void mtrr_save_state(void)
+ 	if (!mtrr_enabled())
+ 		return;
+ 
+-	get_online_cpus();
+ 	first_cpu = cpumask_first(cpu_online_mask);
+ 	smp_call_function_single(first_cpu, mtrr_save_fixed_ranges, NULL, 1);
+-	put_online_cpus();
+ }
+ 
+ void set_mtrr_aps_delayed_init(void)
 diff --git a/arch/x86/kernel/irq_32.c b/arch/x86/kernel/irq_32.c
 index 1f38d9a4d9de..053bf3b2ef39 100644
 --- a/arch/x86/kernel/irq_32.c
@@ -3395,6 +3996,22 @@ index 1f38d9a4d9de..053bf3b2ef39 100644
  
  bool handle_irq(struct irq_desc *desc, struct pt_regs *regs)
  {
+diff --git a/arch/x86/kernel/jump_label.c b/arch/x86/kernel/jump_label.c
+index c37bd0f39c70..ab4f491da2a9 100644
+--- a/arch/x86/kernel/jump_label.c
++++ b/arch/x86/kernel/jump_label.c
+@@ -105,11 +105,9 @@ static void __jump_label_transform(struct jump_entry *entry,
+ void arch_jump_label_transform(struct jump_entry *entry,
+ 			       enum jump_label_type type)
+ {
+-	get_online_cpus();
+ 	mutex_lock(&text_mutex);
+ 	__jump_label_transform(entry, type, NULL, 0);
+ 	mutex_unlock(&text_mutex);
+-	put_online_cpus();
+ }
+ 
+ static enum {
 diff --git a/arch/x86/kernel/process_32.c b/arch/x86/kernel/process_32.c
 index 4c818f8bc135..965f4c787bce 100644
 --- a/arch/x86/kernel/process_32.c
@@ -3752,6 +4369,21 @@ index 2ee7632d4916..54524919baf2 100644
  }
  
  /*
+diff --git a/arch/xtensa/include/asm/spinlock_types.h b/arch/xtensa/include/asm/spinlock_types.h
+index 7ec5ce10c9e9..d765cb2dec85 100644
+--- a/arch/xtensa/include/asm/spinlock_types.h
++++ b/arch/xtensa/include/asm/spinlock_types.h
+@@ -1,10 +1,6 @@
+ #ifndef __ASM_SPINLOCK_TYPES_H
+ #define __ASM_SPINLOCK_TYPES_H
+ 
+-#ifndef __LINUX_SPINLOCK_TYPES_H
+-# error "please don't include this file directly"
+-#endif
+-
+ typedef struct {
+ 	volatile unsigned int slock;
+ } arch_spinlock_t;
 diff --git a/block/blk-core.c b/block/blk-core.c
 index 1fb277501017..b294bb66b1d9 100644
 --- a/block/blk-core.c
@@ -4228,7 +4860,7 @@ index 919be0aa2578..240544253ccd 100644
  	root = kzalloc(sizeof(struct acpi_pci_root), GFP_KERNEL);
  	if (!root)
 diff --git a/drivers/acpi/processor_driver.c b/drivers/acpi/processor_driver.c
-index 9d5f0c7ed3f7..8697a82bd465 100644
+index 9d5f0c7ed3f7..591d1dd3f04e 100644
 --- a/drivers/acpi/processor_driver.c
 +++ b/drivers/acpi/processor_driver.c
 @@ -251,6 +251,9 @@ static int __acpi_processor_start(struct acpi_device *device)
@@ -4252,15 +4884,15 @@ index 9d5f0c7ed3f7..8697a82bd465 100644
  
 -	return __acpi_processor_start(device);
 +	/* Protect against concurrent CPU hotplug operations */
-+	get_online_cpus();
++	cpu_hotplug_disable();
 +	ret = __acpi_processor_start(device);
-+	put_online_cpus();
++	cpu_hotplug_enable();
 +	return ret;
  }
  
  static int acpi_processor_stop(struct device *dev)
 diff --git a/drivers/acpi/processor_throttling.c b/drivers/acpi/processor_throttling.c
-index a12f96cc93ff..3de34633f7f9 100644
+index a12f96cc93ff..7f9aff4b8d62 100644
 --- a/drivers/acpi/processor_throttling.c
 +++ b/drivers/acpi/processor_throttling.c
 @@ -62,8 +62,8 @@ struct acpi_processor_throttling_arg {
@@ -4284,7 +4916,7 @@ index a12f96cc93ff..3de34633f7f9 100644
  			if (ret)
  				return ret;
  		}
-@@ -901,36 +902,31 @@ static int acpi_processor_get_throttling_ptc(struct acpi_processor *pr)
+@@ -901,36 +902,38 @@ static int acpi_processor_get_throttling_ptc(struct acpi_processor *pr)
  	return 0;
  }
  
@@ -4293,6 +4925,13 @@ index a12f96cc93ff..3de34633f7f9 100644
 +	struct acpi_processor *pr = data;
 +
 +	return pr->throttling.acpi_processor_get_throttling(pr);
++}
++
++static int call_on_cpu(int cpu, long (*fn)(void *), void *arg, bool direct)
++{
++	if (direct || (is_percpu_thread() && cpu == smp_processor_id()))
++		return fn(arg);
++	return work_on_cpu(cpu, fn, arg);
 +}
 +
  static int acpi_processor_get_throttling(struct acpi_processor *pr)
@@ -4330,23 +4969,16 @@ index a12f96cc93ff..3de34633f7f9 100644
 -	free_cpumask_var(saved_mask);
  
 -	return ret;
-+	return work_on_cpu(pr->id, __acpi_processor_get_throttling, pr);
++	return call_on_cpu(pr->id, __acpi_processor_get_throttling, pr, false);
  }
  
  static int acpi_processor_get_fadt_info(struct acpi_processor *pr)
-@@ -1080,8 +1076,15 @@ static long acpi_processor_throttling_fn(void *data)
+@@ -1080,8 +1083,8 @@ static long acpi_processor_throttling_fn(void *data)
  			arg->target_state, arg->force);
  }
  
 -int acpi_processor_set_throttling(struct acpi_processor *pr,
 -						int state, bool force)
-+static int call_on_cpu(int cpu, long (*fn)(void *), void *arg, bool direct)
-+{
-+	if (direct)
-+		return fn(arg);
-+	return work_on_cpu(cpu, fn, arg);
-+}
-+
 +static int __acpi_processor_set_throttling(struct acpi_processor *pr,
 +					   int state, bool force, bool direct)
  {
@@ -5154,6 +5786,81 @@ index 35f71825b7f3..bb4a6160d0f7 100644
  	help
  	  This adds the CPUFreq driver for K8/early Opteron/Athlon64 processors.
  	  Support for K10 and newer processors is now in acpi-cpufreq.
+diff --git a/drivers/cpufreq/cpufreq.c b/drivers/cpufreq/cpufreq.c
+index 26b643d57847..29c5b0cbad96 100644
+--- a/drivers/cpufreq/cpufreq.c
++++ b/drivers/cpufreq/cpufreq.c
+@@ -887,7 +887,7 @@ static ssize_t store(struct kobject *kobj, struct attribute *attr,
+ 	struct freq_attr *fattr = to_attr(attr);
+ 	ssize_t ret = -EINVAL;
+ 
+-	get_online_cpus();
++	cpus_read_lock();
+ 
+ 	if (cpu_online(policy->cpu)) {
+ 		down_write(&policy->rwsem);
+@@ -895,7 +895,7 @@ static ssize_t store(struct kobject *kobj, struct attribute *attr,
+ 		up_write(&policy->rwsem);
+ 	}
+ 
+-	put_online_cpus();
++	cpus_read_unlock();
+ 
+ 	return ret;
+ }
+@@ -2441,7 +2441,7 @@ int cpufreq_register_driver(struct cpufreq_driver *driver_data)
+ 	pr_debug("trying to register driver %s\n", driver_data->name);
+ 
+ 	/* Protect against concurrent CPU online/offline. */
+-	get_online_cpus();
++	cpus_read_lock();
+ 
+ 	write_lock_irqsave(&cpufreq_driver_lock, flags);
+ 	if (cpufreq_driver) {
+@@ -2474,9 +2474,10 @@ int cpufreq_register_driver(struct cpufreq_driver *driver_data)
+ 		goto err_if_unreg;
+ 	}
+ 
+-	ret = cpuhp_setup_state_nocalls(CPUHP_AP_ONLINE_DYN, "cpufreq:online",
+-					cpuhp_cpufreq_online,
+-					cpuhp_cpufreq_offline);
++	ret = cpuhp_setup_state_nocalls_cpuslocked(CPUHP_AP_ONLINE_DYN,
++						   "cpufreq:online",
++						   cpuhp_cpufreq_online,
++						   cpuhp_cpufreq_offline);
+ 	if (ret < 0)
+ 		goto err_if_unreg;
+ 	hp_online = ret;
+@@ -2494,7 +2495,7 @@ int cpufreq_register_driver(struct cpufreq_driver *driver_data)
+ 	cpufreq_driver = NULL;
+ 	write_unlock_irqrestore(&cpufreq_driver_lock, flags);
+ out:
+-	put_online_cpus();
++	cpus_read_unlock();
+ 	return ret;
+ }
+ EXPORT_SYMBOL_GPL(cpufreq_register_driver);
+@@ -2517,17 +2518,17 @@ int cpufreq_unregister_driver(struct cpufreq_driver *driver)
+ 	pr_debug("unregistering driver %s\n", driver->name);
+ 
+ 	/* Protect against concurrent cpu hotplug */
+-	get_online_cpus();
++	cpus_read_lock();
+ 	subsys_interface_unregister(&cpufreq_interface);
+ 	remove_boost_sysfs_file();
+-	cpuhp_remove_state_nocalls(hp_online);
++	cpuhp_remove_state_nocalls_cpuslocked(hp_online);
+ 
+ 	write_lock_irqsave(&cpufreq_driver_lock, flags);
+ 
+ 	cpufreq_driver = NULL;
+ 
+ 	write_unlock_irqrestore(&cpufreq_driver_lock, flags);
+-	put_online_cpus();
++	cpus_read_unlock();
+ 
+ 	return 0;
+ }
 diff --git a/drivers/cpufreq/ia64-acpi-cpufreq.c b/drivers/cpufreq/ia64-acpi-cpufreq.c
 index e28a31a40829..a757c0a1e7b5 100644
 --- a/drivers/cpufreq/ia64-acpi-cpufreq.c
@@ -5866,6 +6573,119 @@ index 8370b9dc6037..a57f02403ede 100644
  }
  
  
+diff --git a/drivers/hwtracing/coresight/coresight-etm3x.c b/drivers/hwtracing/coresight/coresight-etm3x.c
+index a51b6b64ecdf..93ee8fc539be 100644
+--- a/drivers/hwtracing/coresight/coresight-etm3x.c
++++ b/drivers/hwtracing/coresight/coresight-etm3x.c
+@@ -587,7 +587,7 @@ static void etm_disable_sysfs(struct coresight_device *csdev)
+ 	 * after cpu online mask indicates the cpu is offline but before the
+ 	 * DYING hotplug callback is serviced by the ETM driver.
+ 	 */
+-	get_online_cpus();
++	cpus_read_lock();
+ 	spin_lock(&drvdata->spinlock);
+ 
+ 	/*
+@@ -597,7 +597,7 @@ static void etm_disable_sysfs(struct coresight_device *csdev)
+ 	smp_call_function_single(drvdata->cpu, etm_disable_hw, drvdata, 1);
+ 
+ 	spin_unlock(&drvdata->spinlock);
+-	put_online_cpus();
++	cpus_read_unlock();
+ 
+ 	dev_info(drvdata->dev, "ETM tracing disabled\n");
+ }
+@@ -795,7 +795,7 @@ static int etm_probe(struct amba_device *adev, const struct amba_id *id)
+ 
+ 	drvdata->cpu = pdata ? pdata->cpu : 0;
+ 
+-	get_online_cpus();
++	cpus_read_lock();
+ 	etmdrvdata[drvdata->cpu] = drvdata;
+ 
+ 	if (smp_call_function_single(drvdata->cpu,
+@@ -803,17 +803,17 @@ static int etm_probe(struct amba_device *adev, const struct amba_id *id)
+ 		dev_err(dev, "ETM arch init failed\n");
+ 
+ 	if (!etm_count++) {
+-		cpuhp_setup_state_nocalls(CPUHP_AP_ARM_CORESIGHT_STARTING,
+-					  "arm/coresight:starting",
+-					  etm_starting_cpu, etm_dying_cpu);
+-		ret = cpuhp_setup_state_nocalls(CPUHP_AP_ONLINE_DYN,
+-						"arm/coresight:online",
+-						etm_online_cpu, NULL);
++		cpuhp_setup_state_nocalls_cpuslocked(CPUHP_AP_ARM_CORESIGHT_STARTING,
++						     "arm/coresight:starting",
++						     etm_starting_cpu, etm_dying_cpu);
++		ret = cpuhp_setup_state_nocalls_cpuslocked(CPUHP_AP_ONLINE_DYN,
++							   "arm/coresight:online",
++							   etm_online_cpu, NULL);
+ 		if (ret < 0)
+ 			goto err_arch_supported;
+ 		hp_online = ret;
+ 	}
+-	put_online_cpus();
++	cpus_read_unlock();
+ 
+ 	if (etm_arch_supported(drvdata->arch) == false) {
+ 		ret = -EINVAL;
+diff --git a/drivers/hwtracing/coresight/coresight-etm4x.c b/drivers/hwtracing/coresight/coresight-etm4x.c
+index d1340fb4e457..532adc9dd32a 100644
+--- a/drivers/hwtracing/coresight/coresight-etm4x.c
++++ b/drivers/hwtracing/coresight/coresight-etm4x.c
+@@ -371,7 +371,7 @@ static void etm4_disable_sysfs(struct coresight_device *csdev)
+ 	 * after cpu online mask indicates the cpu is offline but before the
+ 	 * DYING hotplug callback is serviced by the ETM driver.
+ 	 */
+-	get_online_cpus();
++	cpus_read_lock();
+ 	spin_lock(&drvdata->spinlock);
+ 
+ 	/*
+@@ -381,7 +381,7 @@ static void etm4_disable_sysfs(struct coresight_device *csdev)
+ 	smp_call_function_single(drvdata->cpu, etm4_disable_hw, drvdata, 1);
+ 
+ 	spin_unlock(&drvdata->spinlock);
+-	put_online_cpus();
++	cpus_read_unlock();
+ 
+ 	dev_info(drvdata->dev, "ETM tracing disabled\n");
+ }
+@@ -982,7 +982,7 @@ static int etm4_probe(struct amba_device *adev, const struct amba_id *id)
+ 
+ 	drvdata->cpu = pdata ? pdata->cpu : 0;
+ 
+-	get_online_cpus();
++	cpus_read_lock();
+ 	etmdrvdata[drvdata->cpu] = drvdata;
+ 
+ 	if (smp_call_function_single(drvdata->cpu,
+@@ -990,18 +990,18 @@ static int etm4_probe(struct amba_device *adev, const struct amba_id *id)
+ 		dev_err(dev, "ETM arch init failed\n");
+ 
+ 	if (!etm4_count++) {
+-		cpuhp_setup_state_nocalls(CPUHP_AP_ARM_CORESIGHT_STARTING,
+-					  "arm/coresight4:starting",
+-					  etm4_starting_cpu, etm4_dying_cpu);
+-		ret = cpuhp_setup_state_nocalls(CPUHP_AP_ONLINE_DYN,
+-						"arm/coresight4:online",
+-						etm4_online_cpu, NULL);
++		cpuhp_setup_state_nocalls_cpuslocked(CPUHP_AP_ARM_CORESIGHT_STARTING,
++						     "arm/coresight4:starting",
++						     etm4_starting_cpu, etm4_dying_cpu);
++		ret = cpuhp_setup_state_nocalls_cpuslocked(CPUHP_AP_ONLINE_DYN,
++							   "arm/coresight4:online",
++							   etm4_online_cpu, NULL);
+ 		if (ret < 0)
+ 			goto err_arch_supported;
+ 		hp_online = ret;
+ 	}
+ 
+-	put_online_cpus();
++	cpus_read_unlock();
+ 
+ 	if (etm4_arch_supported(drvdata->arch) == false) {
+ 		ret = -EINVAL;
 diff --git a/drivers/ide/alim15x3.c b/drivers/ide/alim15x3.c
 index 36f76e28a0bf..394f142f90c7 100644
 --- a/drivers/ide/alim15x3.c
@@ -6533,6 +7353,80 @@ index 98e1380b9917..d90183f0acf5 100644
  						 ctx->done.done);
  		}
  		break;
+diff --git a/drivers/pci/pci-driver.c b/drivers/pci/pci-driver.c
+index afa72717a979..f84d2a8573aa 100644
+--- a/drivers/pci/pci-driver.c
++++ b/drivers/pci/pci-driver.c
+@@ -320,10 +320,19 @@ static long local_pci_probe(void *_ddi)
+ 	return 0;
+ }
+ 
++static bool pci_physfn_is_probed(struct pci_dev *dev)
++{
++#ifdef CONFIG_PCI_IOV
++	return dev->is_virtfn && dev->physfn->is_probed;
++#else
++	return false;
++#endif
++}
++
+ static int pci_call_probe(struct pci_driver *drv, struct pci_dev *dev,
+ 			  const struct pci_device_id *id)
+ {
+-	int error, node;
++	int error, node, cpu;
+ 	struct drv_dev_and_id ddi = { drv, dev, id };
+ 
+ 	/*
+@@ -332,33 +341,27 @@ static int pci_call_probe(struct pci_driver *drv, struct pci_dev *dev,
+ 	 * on the right node.
+ 	 */
+ 	node = dev_to_node(&dev->dev);
++	dev->is_probed = 1;
++
++	cpu_hotplug_disable();
+ 
+ 	/*
+-	 * On NUMA systems, we are likely to call a PF probe function using
+-	 * work_on_cpu().  If that probe calls pci_enable_sriov() (which
+-	 * adds the VF devices via pci_bus_add_device()), we may re-enter
+-	 * this function to call the VF probe function.  Calling
+-	 * work_on_cpu() again will cause a lockdep warning.  Since VFs are
+-	 * always on the same node as the PF, we can work around this by
+-	 * avoiding work_on_cpu() when we're already on the correct node.
+-	 *
+-	 * Preemption is enabled, so it's theoretically unsafe to use
+-	 * numa_node_id(), but even if we run the probe function on the
+-	 * wrong node, it should be functionally correct.
++	 * Prevent nesting work_on_cpu() for the case where a Virtual Function
++	 * device is probed from work_on_cpu() of the Physical device.
+ 	 */
+-	if (node >= 0 && node != numa_node_id()) {
+-		int cpu;
+-
+-		get_online_cpus();
++	if (node < 0 || node >= MAX_NUMNODES || !node_online(node) ||
++	    pci_physfn_is_probed(dev))
++		cpu = nr_cpu_ids;
++	else
+ 		cpu = cpumask_any_and(cpumask_of_node(node), cpu_online_mask);
+-		if (cpu < nr_cpu_ids)
+-			error = work_on_cpu(cpu, local_pci_probe, &ddi);
+-		else
+-			error = local_pci_probe(&ddi);
+-		put_online_cpus();
+-	} else
++
++	if (cpu < nr_cpu_ids)
++		error = work_on_cpu(cpu, local_pci_probe, &ddi);
++	else
+ 		error = local_pci_probe(&ddi);
+ 
++	dev->is_probed = 0;
++	cpu_hotplug_enable();
+ 	return error;
+ }
+ 
 diff --git a/drivers/scsi/fcoe/fcoe.c b/drivers/scsi/fcoe/fcoe.c
 index ab7bc1505e0b..12c767a90b2e 100644
 --- a/drivers/scsi/fcoe/fcoe.c
@@ -7140,7 +8034,7 @@ index a27fc8791551..791aecb7c1ac 100644
  	cifs_dbg(FYI, "%s: for %s\n", __func__, name->name);
  
 diff --git a/fs/dcache.c b/fs/dcache.c
-index 95d71eda8142..26fd8878cb21 100644
+index 6dc078da0838..a77ba1a6686b 100644
 --- a/fs/dcache.c
 +++ b/fs/dcache.c
 @@ -19,6 +19,7 @@
@@ -7182,7 +8076,7 @@ index 95d71eda8142..26fd8878cb21 100644
  		goto repeat;
  	}
  }
-@@ -2330,7 +2342,7 @@ void d_delete(struct dentry * dentry)
+@@ -2331,7 +2343,7 @@ void d_delete(struct dentry * dentry)
  	if (dentry->d_lockref.count == 1) {
  		if (!spin_trylock(&inode->i_lock)) {
  			spin_unlock(&dentry->d_lock);
@@ -7191,7 +8085,7 @@ index 95d71eda8142..26fd8878cb21 100644
  			goto again;
  		}
  		dentry->d_flags &= ~DCACHE_CANT_MOUNT;
-@@ -2390,21 +2402,24 @@ static inline void end_dir_add(struct inode *dir, unsigned n)
+@@ -2391,21 +2403,24 @@ static inline void end_dir_add(struct inode *dir, unsigned n)
  
  static void d_wait_lookup(struct dentry *dentry)
  {
@@ -7227,7 +8121,7 @@ index 95d71eda8142..26fd8878cb21 100644
  {
  	unsigned int hash = name->hash;
  	struct hlist_bl_head *b = in_lookup_hash(parent, hash);
-@@ -2513,7 +2528,7 @@ void __d_lookup_done(struct dentry *dentry)
+@@ -2514,7 +2529,7 @@ void __d_lookup_done(struct dentry *dentry)
  	hlist_bl_lock(b);
  	dentry->d_flags &= ~DCACHE_PAR_LOOKUP;
  	__hlist_bl_del(&dentry->d_u.d_in_lookup_hash);
@@ -7236,7 +8130,7 @@ index 95d71eda8142..26fd8878cb21 100644
  	dentry->d_wait = NULL;
  	hlist_bl_unlock(b);
  	INIT_HLIST_NODE(&dentry->d_u.d_alias);
-@@ -3610,6 +3625,11 @@ EXPORT_SYMBOL(d_genocide);
+@@ -3611,6 +3626,11 @@ EXPORT_SYMBOL(d_genocide);
  
  void __init vfs_caches_init_early(void)
  {
@@ -7268,10 +8162,10 @@ index 341251421ced..b5f21ded9811 100644
  
  static void ep_remove_wait_queue(struct eppoll_entry *pwq)
 diff --git a/fs/exec.c b/fs/exec.c
-index ce0901e65c40..39051d30109f 100644
+index e9908c3f0227..d94d7f14063c 100644
 --- a/fs/exec.c
 +++ b/fs/exec.c
-@@ -1042,12 +1042,14 @@ static int exec_mmap(struct mm_struct *mm)
+@@ -1043,12 +1043,14 @@ static int exec_mmap(struct mm_struct *mm)
  		}
  	}
  	task_lock(tsk);
@@ -7479,7 +8373,7 @@ index 19dcf62133cc..29d01b4b6699 100644
  	if (unlikely(IS_DEADDIR(dir_inode)))
  		return -ENOENT;
 diff --git a/fs/namespace.c b/fs/namespace.c
-index cc1375eff88c..57e6fe3f38ff 100644
+index f6f7e57e2192..2879ffac2b66 100644
 --- a/fs/namespace.c
 +++ b/fs/namespace.c
 @@ -14,6 +14,7 @@
@@ -7490,7 +8384,7 @@ index cc1375eff88c..57e6fe3f38ff 100644
  #include <linux/security.h>
  #include <linux/cred.h>
  #include <linux/idr.h>
-@@ -355,8 +356,11 @@ int __mnt_want_write(struct vfsmount *m)
+@@ -356,8 +357,11 @@ int __mnt_want_write(struct vfsmount *m)
  	 * incremented count after it has set MNT_WRITE_HOLD.
  	 */
  	smp_mb();
@@ -7851,10 +8745,10 @@ index c87b6b9a8a76..c0a4bbafcf57 100644
  		if (IS_ERR(child))
  			goto end_instantiate;
 diff --git a/fs/proc/proc_sysctl.c b/fs/proc/proc_sysctl.c
-index d04ea4349909..c0b1ecf37af6 100644
+index 4353faa9d416..1ed3652f7c40 100644
 --- a/fs/proc/proc_sysctl.c
 +++ b/fs/proc/proc_sysctl.c
-@@ -665,7 +665,7 @@ static bool proc_sys_fill_cache(struct file *file,
+@@ -682,7 +682,7 @@ static bool proc_sys_fill_cache(struct file *file,
  
  	child = d_lookup(dir, &qname);
  	if (!child) {
@@ -7951,7 +8845,7 @@ index 9382c5da7a2e..d2dabf104da7 100644
  void blk_mq_start_request(struct request *rq);
  void blk_mq_end_request(struct request *rq, int error);
 diff --git a/include/linux/blkdev.h b/include/linux/blkdev.h
-index 01a696b0a4d3..7efee29c3130 100644
+index 3f03d0fc4250..52214cac92c6 100644
 --- a/include/linux/blkdev.h
 +++ b/include/linux/blkdev.h
 @@ -128,6 +128,9 @@ typedef __u32 __bitwise req_flags_t;
@@ -8137,28 +9031,146 @@ index 5d5aaae3af43..3bca1590e29f 100644
  
  /**
 diff --git a/include/linux/cpu.h b/include/linux/cpu.h
-index f92081234afd..41d8a9b6f9fa 100644
+index f92081234afd..1bbb3502c69e 100644
 --- a/include/linux/cpu.h
 +++ b/include/linux/cpu.h
-@@ -109,6 +109,8 @@ extern void cpu_hotplug_disable(void);
+@@ -99,26 +99,37 @@ static inline void cpu_maps_update_done(void)
+ extern struct bus_type cpu_subsys;
+ 
+ #ifdef CONFIG_HOTPLUG_CPU
+-/* Stop CPUs going up and down. */
+-
+-extern void cpu_hotplug_begin(void);
+-extern void cpu_hotplug_done(void);
+-extern void get_online_cpus(void);
+-extern void put_online_cpus(void);
++extern void cpus_write_lock(void);
++extern void cpus_write_unlock(void);
++extern void cpus_read_lock(void);
++extern void cpus_read_unlock(void);
++extern void lockdep_assert_cpus_held(void);
+ extern void cpu_hotplug_disable(void);
  extern void cpu_hotplug_enable(void);
  void clear_tasks_mm_cpumask(int cpu);
  int cpu_down(unsigned int cpu);
 +extern void pin_current_cpu(void);
 +extern void unpin_current_cpu(void);
  
- #else		/* CONFIG_HOTPLUG_CPU */
+-#else		/* CONFIG_HOTPLUG_CPU */
++#else /* CONFIG_HOTPLUG_CPU */
  
-@@ -118,6 +120,9 @@ static inline void cpu_hotplug_done(void) {}
- #define put_online_cpus()	do { } while (0)
- #define cpu_hotplug_disable()	do { } while (0)
- #define cpu_hotplug_enable()	do { } while (0)
-+static inline void pin_current_cpu(void)	{ }
-+static inline void unpin_current_cpu(void)	{ }
+-static inline void cpu_hotplug_begin(void) {}
+-static inline void cpu_hotplug_done(void) {}
+-#define get_online_cpus()	do { } while (0)
+-#define put_online_cpus()	do { } while (0)
+-#define cpu_hotplug_disable()	do { } while (0)
+-#define cpu_hotplug_enable()	do { } while (0)
+-#endif		/* CONFIG_HOTPLUG_CPU */
++static inline void cpus_write_lock(void) { }
++static inline void cpus_write_unlock(void) { }
++static inline void cpus_read_lock(void) { }
++static inline void cpus_read_unlock(void) { }
++static inline void lockdep_assert_cpus_held(void) { }
++static inline void cpu_hotplug_disable(void) { }
++static inline void cpu_hotplug_enable(void) { }
++static inline void pin_current_cpu(void) { }
++static inline void unpin_current_cpu(void) { }
 +
- #endif		/* CONFIG_HOTPLUG_CPU */
++#endif	/* !CONFIG_HOTPLUG_CPU */
++
++/* Wrappers which go away once all code is converted */
++static inline void cpu_hotplug_begin(void) { cpus_write_lock(); }
++static inline void cpu_hotplug_done(void) { cpus_write_unlock(); }
++static inline void get_online_cpus(void) { cpus_read_lock(); }
++static inline void put_online_cpus(void) { cpus_read_unlock(); }
  
  #ifdef CONFIG_PM_SLEEP_SMP
+ extern int freeze_secondary_cpus(int primary);
+diff --git a/include/linux/cpuhotplug.h b/include/linux/cpuhotplug.h
+index 62d240e962f0..3816ea5e2f70 100644
+--- a/include/linux/cpuhotplug.h
++++ b/include/linux/cpuhotplug.h
+@@ -151,6 +151,11 @@ int __cpuhp_setup_state(enum cpuhp_state state,	const char *name, bool invoke,
+ 			int (*startup)(unsigned int cpu),
+ 			int (*teardown)(unsigned int cpu), bool multi_instance);
+ 
++int __cpuhp_setup_state_cpuslocked(enum cpuhp_state state, const char *name,
++				   bool invoke,
++				   int (*startup)(unsigned int cpu),
++				   int (*teardown)(unsigned int cpu),
++				   bool multi_instance);
+ /**
+  * cpuhp_setup_state - Setup hotplug state callbacks with calling the callbacks
+  * @state:	The state for which the calls are installed
+@@ -169,6 +174,15 @@ static inline int cpuhp_setup_state(enum cpuhp_state state,
+ 	return __cpuhp_setup_state(state, name, true, startup, teardown, false);
+ }
+ 
++static inline int cpuhp_setup_state_cpuslocked(enum cpuhp_state state,
++					       const char *name,
++					       int (*startup)(unsigned int cpu),
++					       int (*teardown)(unsigned int cpu))
++{
++	return __cpuhp_setup_state_cpuslocked(state, name, true, startup,
++					      teardown, false);
++}
++
+ /**
+  * cpuhp_setup_state_nocalls - Setup hotplug state callbacks without calling the
+  *			       callbacks
+@@ -189,6 +203,15 @@ static inline int cpuhp_setup_state_nocalls(enum cpuhp_state state,
+ 				   false);
+ }
+ 
++static inline int cpuhp_setup_state_nocalls_cpuslocked(enum cpuhp_state state,
++						     const char *name,
++						     int (*startup)(unsigned int cpu),
++						     int (*teardown)(unsigned int cpu))
++{
++	return __cpuhp_setup_state_cpuslocked(state, name, false, startup,
++					    teardown, false);
++}
++
+ /**
+  * cpuhp_setup_state_multi - Add callbacks for multi state
+  * @state:	The state for which the calls are installed
+@@ -215,6 +238,8 @@ static inline int cpuhp_setup_state_multi(enum cpuhp_state state,
+ 
+ int __cpuhp_state_add_instance(enum cpuhp_state state, struct hlist_node *node,
+ 			       bool invoke);
++int __cpuhp_state_add_instance_cpuslocked(enum cpuhp_state state,
++					  struct hlist_node *node, bool invoke);
+ 
+ /**
+  * cpuhp_state_add_instance - Add an instance for a state and invoke startup
+@@ -247,7 +272,15 @@ static inline int cpuhp_state_add_instance_nocalls(enum cpuhp_state state,
+ 	return __cpuhp_state_add_instance(state, node, false);
+ }
+ 
++static inline int
++cpuhp_state_add_instance_nocalls_cpuslocked(enum cpuhp_state state,
++					    struct hlist_node *node)
++{
++	return __cpuhp_state_add_instance_cpuslocked(state, node, false);
++}
++
+ void __cpuhp_remove_state(enum cpuhp_state state, bool invoke);
++void __cpuhp_remove_state_cpuslocked(enum cpuhp_state state, bool invoke);
+ 
+ /**
+  * cpuhp_remove_state - Remove hotplug state callbacks and invoke the teardown
+@@ -271,6 +304,11 @@ static inline void cpuhp_remove_state_nocalls(enum cpuhp_state state)
+ 	__cpuhp_remove_state(state, false);
+ }
+ 
++static inline void cpuhp_remove_state_nocalls_cpuslocked(enum cpuhp_state state)
++{
++	__cpuhp_remove_state_cpuslocked(state, false);
++}
++
+ /**
+  * cpuhp_remove_multi_state - Remove hotplug multi state callback
+  * @state:	The state for which the calls are removed
 diff --git a/include/linux/dcache.h b/include/linux/dcache.h
 index d2e38dc6172c..242f98a5d612 100644
 --- a/include/linux/dcache.h
@@ -8962,10 +9974,10 @@ index cb483305e1f5..4e5062316bb6 100644
  static inline bool hlist_bl_is_locked(struct hlist_bl_head *b)
 diff --git a/include/linux/locallock.h b/include/linux/locallock.h
 new file mode 100644
-index 000000000000..845c77f1a5ca
+index 000000000000..eeb1a66df402
 --- /dev/null
 +++ b/include/linux/locallock.h
-@@ -0,0 +1,278 @@
+@@ -0,0 +1,262 @@
 +#ifndef _LINUX_LOCALLOCK_H
 +#define _LINUX_LOCALLOCK_H
 +
@@ -9004,26 +10016,10 @@ index 000000000000..845c77f1a5ca
 +			spin_lock_init(&per_cpu(lvar, __cpu).lock);	\
 +	} while (0)
 +
-+/*
-+ * spin_lock|trylock|unlock_local flavour that does not migrate disable
-+ * used for __local_lock|trylock|unlock where get_local_var/put_local_var
-+ * already takes care of the migrate_disable/enable
-+ * for CONFIG_PREEMPT_BASE map to the normal spin_* calls.
-+ */
-+#ifdef CONFIG_PREEMPT_RT_FULL
-+# define spin_lock_local(lock)			rt_spin_lock__no_mg(lock)
-+# define spin_trylock_local(lock)		rt_spin_trylock__no_mg(lock)
-+# define spin_unlock_local(lock)		rt_spin_unlock__no_mg(lock)
-+#else
-+# define spin_lock_local(lock)			spin_lock(lock)
-+# define spin_trylock_local(lock)		spin_trylock(lock)
-+# define spin_unlock_local(lock)		spin_unlock(lock)
-+#endif
-+
 +static inline void __local_lock(struct local_irq_lock *lv)
 +{
 +	if (lv->owner != current) {
-+		spin_lock_local(&lv->lock);
++		spin_lock(&lv->lock);
 +		LL_WARN(lv->owner);
 +		LL_WARN(lv->nestcnt);
 +		lv->owner = current;
@@ -9039,7 +10035,7 @@ index 000000000000..845c77f1a5ca
 +
 +static inline int __local_trylock(struct local_irq_lock *lv)
 +{
-+	if (lv->owner != current && spin_trylock_local(&lv->lock)) {
++	if (lv->owner != current && spin_trylock(&lv->lock)) {
 +		LL_WARN(lv->owner);
 +		LL_WARN(lv->nestcnt);
 +		lv->owner = current;
@@ -9066,7 +10062,7 @@ index 000000000000..845c77f1a5ca
 +		return;
 +
 +	lv->owner = NULL;
-+	spin_unlock_local(&lv->lock);
++	spin_unlock(&lv->lock);
 +}
 +
 +#define local_unlock(lvar)					\
@@ -9707,6 +10703,32 @@ index 4149868de4e6..56e83ea3a976 100644
  /* CPU notfiers are defined in include/linux/cpu.h. */
  
  /* netdevice notifiers are defined in include/linux/netdevice.h */
+diff --git a/include/linux/padata.h b/include/linux/padata.h
+index 0f9e567d5e15..2f9c1f93b1ce 100644
+--- a/include/linux/padata.h
++++ b/include/linux/padata.h
+@@ -166,9 +166,6 @@ struct padata_instance {
+ 
+ extern struct padata_instance *padata_alloc_possible(
+ 					struct workqueue_struct *wq);
+-extern struct padata_instance *padata_alloc(struct workqueue_struct *wq,
+-					    const struct cpumask *pcpumask,
+-					    const struct cpumask *cbcpumask);
+ extern void padata_free(struct padata_instance *pinst);
+ extern int padata_do_parallel(struct padata_instance *pinst,
+ 			      struct padata_priv *padata, int cb_cpu);
+diff --git a/include/linux/pci.h b/include/linux/pci.h
+index b2d5580cd9e2..4e31461a1c9b 100644
+--- a/include/linux/pci.h
++++ b/include/linux/pci.h
+@@ -370,6 +370,7 @@ struct pci_dev {
+ 	unsigned int	irq_managed:1;
+ 	unsigned int	has_secondary_link:1;
+ 	unsigned int	non_compliant_bars:1;	/* broken BARs; ignore them */
++	unsigned int	is_probed:1;		/* device probing in progress */
+ 	pci_dev_flags_t dev_flags;
+ 	atomic_t	enable_cnt;	/* pci_enable_device has been called */
+ 
 diff --git a/include/linux/percpu-rwsem.h b/include/linux/percpu-rwsem.h
 index 93664f022ecf..539ace5dba9e 100644
 --- a/include/linux/percpu-rwsem.h
@@ -9815,6 +10837,19 @@ index 56939d3f6e53..b988bf40ad3e 100644
  extern bool is_kernel_percpu_address(unsigned long addr);
  
  #if !defined(CONFIG_SMP) || !defined(CONFIG_HAVE_SETUP_PER_CPU_AREA)
+diff --git a/include/linux/perf_event.h b/include/linux/perf_event.h
+index 000fdb211c7d..00de0719f7aa 100644
+--- a/include/linux/perf_event.h
++++ b/include/linux/perf_event.h
+@@ -794,6 +794,8 @@ struct perf_cpu_context {
+ 
+ 	struct list_head		sched_cb_entry;
+ 	int				sched_cb_usage;
++
++	int				online;
+ };
+ 
+ struct perf_output_handle {
 diff --git a/include/linux/pid.h b/include/linux/pid.h
 index 4d179316e431..b02ed6f38888 100644
 --- a/include/linux/pid.h
@@ -10507,10 +11542,10 @@ index 1abba5ce2a2f..294a8b4875f1 100644
  
 diff --git a/include/linux/rwlock_rt.h b/include/linux/rwlock_rt.h
 new file mode 100644
-index 000000000000..49ed2d45d3be
+index 000000000000..0bc5ce425a2b
 --- /dev/null
 +++ b/include/linux/rwlock_rt.h
-@@ -0,0 +1,99 @@
+@@ -0,0 +1,114 @@
 +#ifndef __LINUX_RWLOCK_RT_H
 +#define __LINUX_RWLOCK_RT_H
 +
@@ -10518,41 +11553,39 @@ index 000000000000..49ed2d45d3be
 +#error Do not include directly. Use spinlock.h
 +#endif
 +
-+#define rwlock_init(rwl)				\
-+do {							\
-+	static struct lock_class_key __key;		\
-+							\
-+	rt_mutex_init(&(rwl)->lock);			\
-+	__rt_rwlock_init(rwl, #rwl, &__key);		\
-+} while (0)
-+
 +extern void __lockfunc rt_write_lock(rwlock_t *rwlock);
 +extern void __lockfunc rt_read_lock(rwlock_t *rwlock);
 +extern int __lockfunc rt_write_trylock(rwlock_t *rwlock);
-+extern int __lockfunc rt_write_trylock_irqsave(rwlock_t *trylock, unsigned long *flags);
 +extern int __lockfunc rt_read_trylock(rwlock_t *rwlock);
 +extern void __lockfunc rt_write_unlock(rwlock_t *rwlock);
 +extern void __lockfunc rt_read_unlock(rwlock_t *rwlock);
-+extern unsigned long __lockfunc rt_write_lock_irqsave(rwlock_t *rwlock);
-+extern unsigned long __lockfunc rt_read_lock_irqsave(rwlock_t *rwlock);
 +extern void __rt_rwlock_init(rwlock_t *rwlock, char *name, struct lock_class_key *key);
 +
 +#define read_trylock(lock)	__cond_lock(lock, rt_read_trylock(lock))
 +#define write_trylock(lock)	__cond_lock(lock, rt_write_trylock(lock))
 +
-+#define write_trylock_irqsave(lock, flags)	\
-+	__cond_lock(lock, rt_write_trylock_irqsave(lock, &flags))
++static inline int __write_trylock_rt_irqsave(rwlock_t *lock, unsigned long *flags)
++{
++	/* XXX ARCH_IRQ_ENABLED */
++	*flags = 0;
++	return rt_write_trylock(lock);
++}
++
++#define write_trylock_irqsave(lock, flags)		\
++	__cond_lock(lock, __write_trylock_rt_irqsave(lock, &(flags)))
 +
 +#define read_lock_irqsave(lock, flags)			\
 +	do {						\
 +		typecheck(unsigned long, flags);	\
-+		flags = rt_read_lock_irqsave(lock);	\
++		rt_read_lock(lock);			\
++		flags = 0;				\
 +	} while (0)
 +
 +#define write_lock_irqsave(lock, flags)			\
 +	do {						\
 +		typecheck(unsigned long, flags);	\
-+		flags = rt_write_lock_irqsave(lock);	\
++		rt_write_lock(lock);			\
++		flags = 0;				\
 +	} while (0)
 +
 +#define read_lock(lock)		rt_read_lock(lock)
@@ -10609,6 +11642,23 @@ index 000000000000..49ed2d45d3be
 +		rt_write_unlock(lock);			\
 +	} while (0)
 +
++#define rwlock_init(rwl)				\
++do {							\
++	static struct lock_class_key __key;		\
++							\
++	__rt_rwlock_init(rwl, #rwl, &__key);		\
++} while (0)
++
++/*
++ * Internal functions made global for CPU pinning
++ */
++void __read_rt_lock(struct rt_rw_lock *lock);
++int __read_rt_trylock(struct rt_rw_lock *lock);
++void __write_rt_lock(struct rt_rw_lock *lock);
++int __write_rt_trylock(struct rt_rw_lock *lock);
++void __read_rt_unlock(struct rt_rw_lock *lock);
++void __write_rt_unlock(struct rt_rw_lock *lock);
++
 +#endif
 diff --git a/include/linux/rwlock_types.h b/include/linux/rwlock_types.h
 index cc0072e93e36..5317cd957292 100644
@@ -10627,10 +11677,10 @@ index cc0072e93e36..5317cd957292 100644
   *				  and initializers
 diff --git a/include/linux/rwlock_types_rt.h b/include/linux/rwlock_types_rt.h
 new file mode 100644
-index 000000000000..51b28d775fe1
+index 000000000000..0cbe5ed7f794
 --- /dev/null
 +++ b/include/linux/rwlock_types_rt.h
-@@ -0,0 +1,33 @@
+@@ -0,0 +1,78 @@
 +#ifndef __LINUX_RWLOCK_TYPES_RT_H
 +#define __LINUX_RWLOCK_TYPES_RT_H
 +
@@ -10638,23 +11688,23 @@ index 000000000000..51b28d775fe1
 +#error "Do not include directly. Include spinlock_types.h instead"
 +#endif
 +
-+/*
-+ * rwlocks - rtmutex which allows single reader recursion
-+ */
-+typedef struct {
-+	struct rt_mutex		lock;
-+	int			read_depth;
-+	unsigned int		break_lock;
-+#ifdef CONFIG_DEBUG_LOCK_ALLOC
-+	struct lockdep_map	dep_map;
-+#endif
-+} rwlock_t;
-+
 +#ifdef CONFIG_DEBUG_LOCK_ALLOC
 +# define RW_DEP_MAP_INIT(lockname)	.dep_map = { .name = #lockname }
 +#else
 +# define RW_DEP_MAP_INIT(lockname)
 +#endif
++
++#ifndef CONFIG_RWLOCK_RT_READER_BIASED
++/*
++ * rwlocks - rtmutex which allows single reader recursion
++ */
++typedef struct {
++	struct rt_mutex		lock;
++	unsigned int		break_lock;
++#ifdef CONFIG_DEBUG_LOCK_ALLOC
++	struct lockdep_map	dep_map;
++#endif
++} rwlock_t;
 +
 +#define __RW_LOCK_UNLOCKED(name) \
 +	{ .lock = __RT_MUTEX_INITIALIZER_SAVE_STATE(name.lock),	\
@@ -10662,6 +11712,51 @@ index 000000000000..51b28d775fe1
 +
 +#define DEFINE_RWLOCK(name) \
 +	rwlock_t name = __RW_LOCK_UNLOCKED(name)
++
++#else /* CONFIG_RWLOCK_RT_READER_BIASED */
++
++typedef struct rt_rw_lock rwlock_t;
++
++#define __RW_LOCK_UNLOCKED(name) __RWLOCK_RT_INITIALIZER(name)
++
++#define DEFINE_RWLOCK(name) \
++	rwlock_t name = __RW_LOCK_UNLOCKED(name)
++
++#endif /* !CONFIG_RWLOCK_RT_READER_BIASED */
++
++/*
++ * A reader biased implementation primarily for CPU pinning.
++ *
++ * Can be selected as general replacement for the single reader RT rwlock
++ * variant
++ */
++struct rt_rw_lock {
++	struct rt_mutex		rtmutex;
++	atomic_t		readers;
++#ifdef CONFIG_DEBUG_LOCK_ALLOC
++	struct lockdep_map	dep_map;
++#endif
++};
++
++#define READER_BIAS	(1U << 31)
++#define WRITER_BIAS	(1U << 30)
++
++#define __RWLOCK_RT_INITIALIZER(name)					\
++{									\
++	.readers = ATOMIC_INIT(READER_BIAS),				\
++	.rtmutex = __RT_MUTEX_INITIALIZER_SAVE_STATE(name.rtmutex),	\
++	RW_DEP_MAP_INIT(name)						\
++}
++
++void __rwlock_biased_rt_init(struct rt_rw_lock *lock, const char *name,
++			     struct lock_class_key *key);
++
++#define rwlock_biased_rt_init(rwlock)					\
++	do {								\
++		static struct lock_class_key __key;			\
++									\
++		__rwlock_biased_rt_init((rwlock), #rwlock, &__key);	\
++	} while (0)
 +
 +#endif
 diff --git a/include/linux/rwsem.h b/include/linux/rwsem.h
@@ -10767,7 +11862,7 @@ index 000000000000..2ffbf093ae92
 +
 +#endif
 diff --git a/include/linux/sched.h b/include/linux/sched.h
-index 4cf9a59a4d08..9fce42293731 100644
+index 4cf9a59a4d08..ff0f96863696 100644
 --- a/include/linux/sched.h
 +++ b/include/linux/sched.h
 @@ -26,6 +26,7 @@
@@ -10829,7 +11924,7 @@ index 4cf9a59a4d08..9fce42293731 100644
  	void				*stack;
  	atomic_t			usage;
  	/* Per task flags (PF_*), defined further below: */
-@@ -535,7 +541,15 @@ struct task_struct {
+@@ -535,7 +541,16 @@ struct task_struct {
  
  	unsigned int			policy;
  	int				nr_cpus_allowed;
@@ -10839,6 +11934,7 @@ index 4cf9a59a4d08..9fce42293731 100644
 +#if defined(CONFIG_PREEMPT_COUNT) && defined(CONFIG_SMP)
 +	int				migrate_disable;
 +	int				migrate_disable_update;
++	int				pinned_on_cpu;
 +# ifdef CONFIG_SCHED_DEBUG
 +	int				migrate_disable_atomic;
 +# endif
@@ -10846,7 +11942,7 @@ index 4cf9a59a4d08..9fce42293731 100644
  
  #ifdef CONFIG_PREEMPT_RCU
  	int				rcu_read_lock_nesting;
-@@ -702,6 +716,9 @@ struct task_struct {
+@@ -702,6 +717,9 @@ struct task_struct {
  #ifdef CONFIG_POSIX_TIMERS
  	struct task_cputime		cputime_expires;
  	struct list_head		cpu_timers[3];
@@ -10856,7 +11952,7 @@ index 4cf9a59a4d08..9fce42293731 100644
  #endif
  
  	/* Process credentials: */
-@@ -745,11 +762,17 @@ struct task_struct {
+@@ -745,11 +763,17 @@ struct task_struct {
  	/* Signal handlers: */
  	struct signal_struct		*signal;
  	struct sighand_struct		*sighand;
@@ -10874,7 +11970,7 @@ index 4cf9a59a4d08..9fce42293731 100644
  	unsigned long			sas_ss_sp;
  	size_t				sas_ss_size;
  	unsigned int			sas_ss_flags;
-@@ -774,11 +797,14 @@ struct task_struct {
+@@ -774,11 +798,14 @@ struct task_struct {
  	raw_spinlock_t			pi_lock;
  
  	struct wake_q_node		wake_q;
@@ -10889,7 +11985,7 @@ index 4cf9a59a4d08..9fce42293731 100644
  	/* Deadlock detection and priority inheritance handling: */
  	struct rt_mutex_waiter		*pi_blocked_on;
  #endif
-@@ -1028,9 +1054,23 @@ struct task_struct {
+@@ -1028,9 +1055,23 @@ struct task_struct {
  	unsigned int			sequential_io;
  	unsigned int			sequential_io_avg;
  #endif
@@ -10913,7 +12009,7 @@ index 4cf9a59a4d08..9fce42293731 100644
  	int				pagefault_disabled;
  #ifdef CONFIG_MMU
  	struct task_struct		*oom_reaper_list;
-@@ -1199,6 +1239,7 @@ extern struct pid *cad_pid;
+@@ -1199,6 +1240,7 @@ extern struct pid *cad_pid;
  /*
   * Per process flags
   */
@@ -10921,7 +12017,7 @@ index 4cf9a59a4d08..9fce42293731 100644
  #define PF_IDLE			0x00000002	/* I am an IDLE thread */
  #define PF_EXITING		0x00000004	/* Getting shut down */
  #define PF_EXITPIDONE		0x00000008	/* PI exit done on shut down */
-@@ -1222,7 +1263,7 @@ extern struct pid *cad_pid;
+@@ -1222,7 +1264,7 @@ extern struct pid *cad_pid;
  #define PF_KTHREAD		0x00200000	/* I am a kernel thread */
  #define PF_RANDOMIZE		0x00400000	/* Randomize virtual address space */
  #define PF_SWAPWRITE		0x00800000	/* Allowed to write to swap */
@@ -10930,28 +12026,24 @@ index 4cf9a59a4d08..9fce42293731 100644
  #define PF_MCE_EARLY		0x08000000      /* Early kill for mce process policy */
  #define PF_MUTEX_TESTER		0x20000000	/* Thread belongs to the rt mutex tester */
  #define PF_FREEZER_SKIP		0x40000000	/* Freezer should not count it as freezable */
-@@ -1301,6 +1342,10 @@ extern int task_can_attach(struct task_struct *p, const struct cpumask *cs_cpus_
- #ifdef CONFIG_SMP
- extern void do_set_cpus_allowed(struct task_struct *p, const struct cpumask *new_mask);
- extern int set_cpus_allowed_ptr(struct task_struct *p, const struct cpumask *new_mask);
-+int migrate_me(void);
-+void tell_sched_cpu_down_begin(int cpu);
-+void tell_sched_cpu_down_done(int cpu);
-+
- #else
- static inline void do_set_cpus_allowed(struct task_struct *p, const struct cpumask *new_mask)
- {
-@@ -1311,6 +1356,9 @@ static inline int set_cpus_allowed_ptr(struct task_struct *p, const struct cpuma
- 		return -EINVAL;
- 	return 0;
- }
-+static inline int migrate_me(void) { return 0; }
-+static inline void tell_sched_cpu_down_begin(int cpu) { }
-+static inline void tell_sched_cpu_down_done(int cpu) { }
- #endif
+@@ -1256,6 +1298,16 @@ extern struct pid *cad_pid;
+ #define tsk_used_math(p)			((p)->flags & PF_USED_MATH)
+ #define used_math()				tsk_used_math(current)
  
- #ifndef cpu_relax_yield
-@@ -1388,6 +1436,7 @@ extern struct task_struct *find_task_by_pid_ns(pid_t nr, struct pid_namespace *n
++static inline bool is_percpu_thread(void)
++{
++#ifdef CONFIG_SMP
++	return (current->flags & PF_NO_SETAFFINITY) &&
++		(current->nr_cpus_allowed  == 1);
++#else
++	return true;
++#endif
++}
++
+ /* Per-process atomic flags. */
+ #define PFA_NO_NEW_PRIVS		0	/* May not gain new privileges. */
+ #define PFA_SPREAD_PAGE			1	/* Spread page cache over cpuset */
+@@ -1388,6 +1440,7 @@ extern struct task_struct *find_task_by_pid_ns(pid_t nr, struct pid_namespace *n
  
  extern int wake_up_state(struct task_struct *tsk, unsigned int state);
  extern int wake_up_process(struct task_struct *tsk);
@@ -10959,7 +12051,7 @@ index 4cf9a59a4d08..9fce42293731 100644
  extern void wake_up_new_task(struct task_struct *tsk);
  
  #ifdef CONFIG_SMP
-@@ -1460,6 +1509,89 @@ static inline int test_tsk_need_resched(struct task_struct *tsk)
+@@ -1460,6 +1513,89 @@ static inline int test_tsk_need_resched(struct task_struct *tsk)
  	return unlikely(test_tsk_thread_flag(tsk,TIF_NEED_RESCHED));
  }
  
@@ -11049,7 +12141,7 @@ index 4cf9a59a4d08..9fce42293731 100644
  /*
   * cond_resched() and cond_resched_lock(): latency reduction via
   * explicit rescheduling in places that are safe. The return
-@@ -1485,12 +1617,16 @@ extern int __cond_resched_lock(spinlock_t *lock);
+@@ -1485,12 +1621,16 @@ extern int __cond_resched_lock(spinlock_t *lock);
  	__cond_resched_lock(lock);				\
  })
  
@@ -11463,10 +12555,10 @@ index 42dfab89e740..29d99ae5a8ab 100644
  #endif /* __LINUX_SPINLOCK_API_SMP_H */
 diff --git a/include/linux/spinlock_rt.h b/include/linux/spinlock_rt.h
 new file mode 100644
-index 000000000000..dcbfdb92622f
+index 000000000000..c95e1f5145ac
 --- /dev/null
 +++ b/include/linux/spinlock_rt.h
-@@ -0,0 +1,162 @@
+@@ -0,0 +1,159 @@
 +#ifndef __LINUX_SPINLOCK_RT_H
 +#define __LINUX_SPINLOCK_RT_H
 +
@@ -11487,10 +12579,6 @@ index 000000000000..dcbfdb92622f
 +	__rt_spin_lock_init(slock, #slock, &__key);	\
 +} while (0)
 +
-+void __lockfunc rt_spin_lock__no_mg(spinlock_t *lock);
-+void __lockfunc rt_spin_unlock__no_mg(spinlock_t *lock);
-+int __lockfunc rt_spin_trylock__no_mg(spinlock_t *lock);
-+
 +extern void __lockfunc rt_spin_lock(spinlock_t *lock);
 +extern unsigned long __lockfunc rt_spin_lock_trace_flags(spinlock_t *lock);
 +extern void __lockfunc rt_spin_lock_nested(spinlock_t *lock, int subclass);
@@ -11504,9 +12592,10 @@ index 000000000000..dcbfdb92622f
 +/*
 + * lockdep-less calls, for derived types like rwlock:
 + * (for trylock they can use rt_mutex_trylock() directly.
++ * Migrate disable handling must be done at the call site.
 + */
-+extern void __lockfunc __rt_spin_lock__no_mg(struct rt_mutex *lock);
 +extern void __lockfunc __rt_spin_lock(struct rt_mutex *lock);
++extern void __lockfunc __rt_spin_trylock(struct rt_mutex *lock);
 +extern void __lockfunc __rt_spin_unlock(struct rt_mutex *lock);
 +
 +#define spin_lock(lock)			rt_spin_lock(lock)
@@ -11877,6 +12966,21 @@ index 000000000000..3e3d8c5f7a9a
 +	spinlock_t name = __SPIN_LOCK_UNLOCKED(name)
 +
 +#endif
+diff --git a/include/linux/spinlock_types_up.h b/include/linux/spinlock_types_up.h
+index c09b6407ae1b..b0243ba07fb7 100644
+--- a/include/linux/spinlock_types_up.h
++++ b/include/linux/spinlock_types_up.h
+@@ -1,10 +1,6 @@
+ #ifndef __LINUX_SPINLOCK_TYPES_UP_H
+ #define __LINUX_SPINLOCK_TYPES_UP_H
+ 
+-#ifndef __LINUX_SPINLOCK_TYPES_H
+-# error "please don't include this file directly"
+-#endif
+-
+ /*
+  * include/linux/spinlock_types_up.h - spinlock type definitions for UP
+  *
 diff --git a/include/linux/srcu.h b/include/linux/srcu.h
 index 8a95e5d0fdf9..6867ceaf85ee 100644
 --- a/include/linux/srcu.h
@@ -11903,6 +13007,56 @@ index 8a95e5d0fdf9..6867ceaf85ee 100644
  #define DEFINE_SRCU(name)		__DEFINE_SRCU(name, /* not static */)
  #define DEFINE_STATIC_SRCU(name)	__DEFINE_SRCU(name, static)
  
+diff --git a/include/linux/stop_machine.h b/include/linux/stop_machine.h
+index 3cc9632dcc2a..3d60275e3ba9 100644
+--- a/include/linux/stop_machine.h
++++ b/include/linux/stop_machine.h
+@@ -116,15 +116,29 @@ static inline int try_stop_cpus(const struct cpumask *cpumask,
+  * @fn() runs.
+  *
+  * This can be thought of as a very heavy write lock, equivalent to
+- * grabbing every spinlock in the kernel. */
++ * grabbing every spinlock in the kernel.
++ *
++ * Protects against CPU hotplug.
++ */
+ int stop_machine(cpu_stop_fn_t fn, void *data, const struct cpumask *cpus);
+ 
++/**
++ * stop_machine_cpuslocked: freeze the machine on all CPUs and run this function
++ * @fn: the function to run
++ * @data: the data ptr for the @fn()
++ * @cpus: the cpus to run the @fn() on (NULL = any online cpu)
++ *
++ * Same as above. Must be called from with in a cpus_read_lock() protected
++ * region. Avoids nested calls to cpus_read_lock().
++ */
++int stop_machine_cpuslocked(cpu_stop_fn_t fn, void *data, const struct cpumask *cpus);
++
+ int stop_machine_from_inactive_cpu(cpu_stop_fn_t fn, void *data,
+ 				   const struct cpumask *cpus);
+ #else	/* CONFIG_SMP || CONFIG_HOTPLUG_CPU */
+ 
+-static inline int stop_machine(cpu_stop_fn_t fn, void *data,
+-				 const struct cpumask *cpus)
++static inline int stop_machine_cpuslocked(cpu_stop_fn_t fn, void *data,
++					  const struct cpumask *cpus)
+ {
+ 	unsigned long flags;
+ 	int ret;
+@@ -134,6 +148,12 @@ static inline int stop_machine(cpu_stop_fn_t fn, void *data,
+ 	return ret;
+ }
+ 
++static inline int stop_machine(cpu_stop_fn_t fn, void *data,
++			       const struct cpumask *cpus)
++{
++	return stop_machine_cpuslocked(fn, data, cpus);
++}
++
+ static inline int stop_machine_from_inactive_cpu(cpu_stop_fn_t fn, void *data,
+ 						 const struct cpumask *cpus)
+ {
 diff --git a/include/linux/suspend.h b/include/linux/suspend.h
 index d9718378a8be..e81e6dc7dcb1 100644
 --- a/include/linux/suspend.h
@@ -12590,7 +13744,7 @@ index b0c11cbf5ddf..cf14532f4968 100644
  	cad_pid = task_pid(current);
  
 diff --git a/kernel/Kconfig.locks b/kernel/Kconfig.locks
-index 84d882f3e299..af27c4000812 100644
+index 84d882f3e299..dae81db41bc2 100644
 --- a/kernel/Kconfig.locks
 +++ b/kernel/Kconfig.locks
 @@ -225,11 +225,11 @@ config ARCH_SUPPORTS_ATOMIC_RMW
@@ -12607,6 +13761,27 @@ index 84d882f3e299..af27c4000812 100644
  
  config LOCK_SPIN_ON_OWNER
         def_bool y
+@@ -248,3 +248,20 @@ config ARCH_USE_QUEUED_RWLOCKS
+ config QUEUED_RWLOCKS
+ 	def_bool y if ARCH_USE_QUEUED_RWLOCKS
+ 	depends on SMP
++
++if PREEMPT_RT_FULL
++
++menu "RT Locking"
++
++config RWLOCK_RT_READER_BIASED
++	bool "Reader biased RWLOCK implementation for Preempt-RT"
++	def_bool n
++	help
++	  This is option provides an alternative RWLOCK implementation for
++	  PREEMPT-RT.  This new implementation is not writer friendly as
++	  the regular RT implementation or mainline. However nothing RT
++	  related should be affected. Nevertheless here is a switch in case
++	  something stalls to double check.
++endmenu
++
++endif
 diff --git a/kernel/Kconfig.preempt b/kernel/Kconfig.preempt
 index 3f9c97419f02..11dbe26a8279 100644
 --- a/kernel/Kconfig.preempt
@@ -12985,300 +14160,229 @@ index 943481230cf8..2580bd2ceaf8 100644
  }
  
 diff --git a/kernel/cpu.c b/kernel/cpu.c
-index e27838ab275d..0ec552a7c156 100644
+index e27838ab275d..8b482be77c54 100644
 --- a/kernel/cpu.c
 +++ b/kernel/cpu.c
-@@ -234,6 +234,289 @@ static struct {
- #define cpuhp_lock_acquire()      lock_map_acquire(&cpu_hotplug.dep_map)
- #define cpuhp_lock_release()      lock_map_release(&cpu_hotplug.dep_map)
+@@ -27,6 +27,7 @@
+ #include <linux/smpboot.h>
+ #include <linux/relay.h>
+ #include <linux/slab.h>
++#include <linux/percpu-rwsem.h>
  
-+/**
-+ * hotplug_pcp	- per cpu hotplug descriptor
-+ * @unplug:	set when pin_current_cpu() needs to sync tasks
-+ * @sync_tsk:	the task that waits for tasks to finish pinned sections
-+ * @refcount:	counter of tasks in pinned sections
-+ * @grab_lock:	set when the tasks entering pinned sections should wait
-+ * @synced:	notifier for @sync_tsk to tell cpu_down it's finished
-+ * @mutex:	the mutex to make tasks wait (used when @grab_lock is true)
-+ * @mutex_init:	zero if the mutex hasn't been initialized yet.
-+ *
-+ * Although @unplug and @sync_tsk may point to the same task, the @unplug
-+ * is used as a flag and still exists after @sync_tsk has exited and
-+ * @sync_tsk set to NULL.
-+ */
-+struct hotplug_pcp {
-+	struct task_struct *unplug;
-+	struct task_struct *sync_tsk;
-+	int refcount;
-+	int grab_lock;
-+	struct completion synced;
-+	struct completion unplug_wait;
-+#ifdef CONFIG_PREEMPT_RT_FULL
-+	/*
-+	 * Note, on PREEMPT_RT, the hotplug lock must save the state of
-+	 * the task, otherwise the mutex will cause the task to fail
-+	 * to sleep when required. (Because it's called from migrate_disable())
-+	 *
-+	 * The spinlock_t on PREEMPT_RT is a mutex that saves the task's
-+	 * state.
-+	 */
-+	spinlock_t lock;
-+#else
-+	struct mutex mutex;
-+#endif
-+	int mutex_init;
-+};
-+
-+#ifdef CONFIG_PREEMPT_RT_FULL
-+# define hotplug_lock(hp) rt_spin_lock__no_mg(&(hp)->lock)
-+# define hotplug_unlock(hp) rt_spin_unlock__no_mg(&(hp)->lock)
-+#else
-+# define hotplug_lock(hp) mutex_lock(&(hp)->mutex)
-+# define hotplug_unlock(hp) mutex_unlock(&(hp)->mutex)
+ #include <trace/events/power.h>
+ #define CREATE_TRACE_POINTS
+@@ -65,6 +66,17 @@ struct cpuhp_cpu_state {
+ 
+ static DEFINE_PER_CPU(struct cpuhp_cpu_state, cpuhp_state);
+ 
++#if defined(CONFIG_HOTPLUG_CPU) && defined(CONFIG_PREEMPT_RT_FULL)
++static DEFINE_PER_CPU(struct rt_rw_lock, cpuhp_pin_lock) = \
++	__RWLOCK_RT_INITIALIZER(cpuhp_pin_lock);
 +#endif
 +
-+static DEFINE_PER_CPU(struct hotplug_pcp, hotplug_pcp);
++#if defined(CONFIG_LOCKDEP) && defined(CONFIG_SMP)
++static struct lock_class_key cpuhp_state_key;
++static struct lockdep_map cpuhp_state_lock_map =
++	STATIC_LOCKDEP_MAP_INIT("cpuhp_state", &cpuhp_state_key);
++#endif
 +
+ /**
+  * cpuhp_step - Hotplug state machine step
+  * @name:	Name of the step
+@@ -196,121 +208,90 @@ void cpu_maps_update_done(void)
+ 	mutex_unlock(&cpu_add_remove_lock);
+ }
+ 
+-/* If set, cpu_up and cpu_down will return -EBUSY and do nothing.
++/*
++ * If set, cpu_up and cpu_down will return -EBUSY and do nothing.
+  * Should always be manipulated under cpu_add_remove_lock
+  */
+ static int cpu_hotplug_disabled;
+ 
+ #ifdef CONFIG_HOTPLUG_CPU
+ 
+-static struct {
+-	struct task_struct *active_writer;
+-	/* wait queue to wake up the active_writer */
+-	wait_queue_head_t wq;
+-	/* verifies that no writer will get active while readers are active */
+-	struct mutex lock;
+-	/*
+-	 * Also blocks the new readers during
+-	 * an ongoing cpu hotplug operation.
+-	 */
+-	atomic_t refcount;
+-
+-#ifdef CONFIG_DEBUG_LOCK_ALLOC
+-	struct lockdep_map dep_map;
+-#endif
+-} cpu_hotplug = {
+-	.active_writer = NULL,
+-	.wq = __WAIT_QUEUE_HEAD_INITIALIZER(cpu_hotplug.wq),
+-	.lock = __MUTEX_INITIALIZER(cpu_hotplug.lock),
+-#ifdef CONFIG_DEBUG_LOCK_ALLOC
+-	.dep_map = STATIC_LOCKDEP_MAP_INIT("cpu_hotplug.dep_map", &cpu_hotplug.dep_map),
+-#endif
+-};
+-
+-/* Lockdep annotations for get/put_online_cpus() and cpu_hotplug_begin/end() */
+-#define cpuhp_lock_acquire_read() lock_map_acquire_read(&cpu_hotplug.dep_map)
+-#define cpuhp_lock_acquire_tryread() \
+-				  lock_map_acquire_tryread(&cpu_hotplug.dep_map)
+-#define cpuhp_lock_acquire()      lock_map_acquire(&cpu_hotplug.dep_map)
+-#define cpuhp_lock_release()      lock_map_release(&cpu_hotplug.dep_map)
+-
+-
+-void get_online_cpus(void)
+-{
+-	might_sleep();
+-	if (cpu_hotplug.active_writer == current)
+-		return;
+-	cpuhp_lock_acquire_read();
+-	mutex_lock(&cpu_hotplug.lock);
+-	atomic_inc(&cpu_hotplug.refcount);
+-	mutex_unlock(&cpu_hotplug.lock);
+-}
+-EXPORT_SYMBOL_GPL(get_online_cpus);
+-
+-void put_online_cpus(void)
+-{
+-	int refcount;
+-
+-	if (cpu_hotplug.active_writer == current)
+-		return;
+-
+-	refcount = atomic_dec_return(&cpu_hotplug.refcount);
+-	if (WARN_ON(refcount < 0)) /* try to fix things up */
+-		atomic_inc(&cpu_hotplug.refcount);
+-
+-	if (refcount <= 0 && waitqueue_active(&cpu_hotplug.wq))
+-		wake_up(&cpu_hotplug.wq);
+-
+-	cpuhp_lock_release();
+-
+-}
+-EXPORT_SYMBOL_GPL(put_online_cpus);
+-
+-/*
+- * This ensures that the hotplug operation can begin only when the
+- * refcount goes to zero.
+- *
+- * Note that during a cpu-hotplug operation, the new readers, if any,
+- * will be blocked by the cpu_hotplug.lock
+- *
+- * Since cpu_hotplug_begin() is always called after invoking
+- * cpu_maps_update_begin(), we can be sure that only one writer is active.
+- *
+- * Note that theoretically, there is a possibility of a livelock:
+- * - Refcount goes to zero, last reader wakes up the sleeping
+- *   writer.
+- * - Last reader unlocks the cpu_hotplug.lock.
+- * - A new reader arrives at this moment, bumps up the refcount.
+- * - The writer acquires the cpu_hotplug.lock finds the refcount
+- *   non zero and goes to sleep again.
+- *
+- * However, this is very difficult to achieve in practice since
+- * get_online_cpus() not an api which is called all that often.
+- *
 +/**
 + * pin_current_cpu - Prevent the current cpu from being unplugged
-+ *
-+ * Lightweight version of get_online_cpus() to prevent cpu from being
-+ * unplugged when code runs in a migration disabled region.
-+ *
-+ * Must be called with preemption disabled (preempt_count = 1)!
-+ */
+  */
+-void cpu_hotplug_begin(void)
 +void pin_current_cpu(void)
-+{
-+	struct hotplug_pcp *hp;
-+	int force = 0;
-+
-+retry:
-+	hp = this_cpu_ptr(&hotplug_pcp);
-+
-+	if (!hp->unplug || hp->refcount || force || preempt_count() > 1 ||
-+	    hp->unplug == current) {
-+		hp->refcount++;
+ {
+-	DEFINE_WAIT(wait);
++#ifdef CONFIG_PREEMPT_RT_FULL
++	struct rt_rw_lock *cpuhp_pin;
++	unsigned int cpu;
++	int ret;
+ 
+-	cpu_hotplug.active_writer = current;
+-	cpuhp_lock_acquire();
+-
+-	for (;;) {
+-		mutex_lock(&cpu_hotplug.lock);
+-		prepare_to_wait(&cpu_hotplug.wq, &wait, TASK_UNINTERRUPTIBLE);
+-		if (likely(!atomic_read(&cpu_hotplug.refcount)))
+-				break;
+-		mutex_unlock(&cpu_hotplug.lock);
+-		schedule();
++again:
++	cpuhp_pin = this_cpu_ptr(&cpuhp_pin_lock);
++	ret = __read_rt_trylock(cpuhp_pin);
++	if (ret) {
++		current->pinned_on_cpu = smp_processor_id();
 +		return;
-+	}
-+	if (hp->grab_lock) {
-+		preempt_enable();
-+		hotplug_lock(hp);
-+		hotplug_unlock(hp);
-+	} else {
-+		preempt_enable();
-+		/*
-+		 * Try to push this task off of this CPU.
-+		 */
-+		if (!migrate_me()) {
-+			preempt_disable();
-+			hp = this_cpu_ptr(&hotplug_pcp);
-+			if (!hp->grab_lock) {
-+				/*
-+				 * Just let it continue it's already pinned
-+				 * or about to sleep.
-+				 */
-+				force = 1;
-+				goto retry;
-+			}
-+			preempt_enable();
-+		}
-+	}
-+	preempt_disable();
-+	goto retry;
-+}
+ 	}
+-	finish_wait(&cpu_hotplug.wq, &wait);
++	cpu = smp_processor_id();
++	preempt_lazy_enable();
++	preempt_enable();
 +
++	__read_rt_lock(cpuhp_pin);
++
++	preempt_disable();
++	preempt_lazy_disable();
++	if (cpu != smp_processor_id()) {
++		__read_rt_unlock(cpuhp_pin);
++		goto again;
++	}
++	current->pinned_on_cpu = cpu;
++#endif
+ }
+ 
+-void cpu_hotplug_done(void)
 +/**
 + * unpin_current_cpu - Allow unplug of current cpu
-+ *
-+ * Must be called with preemption or interrupts disabled!
 + */
 +void unpin_current_cpu(void)
-+{
-+	struct hotplug_pcp *hp = this_cpu_ptr(&hotplug_pcp);
-+
-+	WARN_ON(hp->refcount <= 0);
-+
-+	/* This is safe. sync_unplug_thread is pinned to this cpu */
-+	if (!--hp->refcount && hp->unplug && hp->unplug != current)
-+		wake_up_process(hp->unplug);
-+}
-+
-+static void wait_for_pinned_cpus(struct hotplug_pcp *hp)
-+{
-+	set_current_state(TASK_UNINTERRUPTIBLE);
-+	while (hp->refcount) {
-+		schedule_preempt_disabled();
-+		set_current_state(TASK_UNINTERRUPTIBLE);
-+	}
-+}
-+
-+static int sync_unplug_thread(void *data)
-+{
-+	struct hotplug_pcp *hp = data;
-+
-+	wait_for_completion(&hp->unplug_wait);
-+	preempt_disable();
-+	hp->unplug = current;
-+	wait_for_pinned_cpus(hp);
-+
-+	/*
-+	 * This thread will synchronize the cpu_down() with threads
-+	 * that have pinned the CPU. When the pinned CPU count reaches
-+	 * zero, we inform the cpu_down code to continue to the next step.
-+	 */
-+	set_current_state(TASK_UNINTERRUPTIBLE);
-+	preempt_enable();
-+	complete(&hp->synced);
-+
-+	/*
-+	 * If all succeeds, the next step will need tasks to wait till
-+	 * the CPU is offline before continuing. To do this, the grab_lock
-+	 * is set and tasks going into pin_current_cpu() will block on the
-+	 * mutex. But we still need to wait for those that are already in
-+	 * pinned CPU sections. If the cpu_down() failed, the kthread_should_stop()
-+	 * will kick this thread out.
-+	 */
-+	while (!hp->grab_lock && !kthread_should_stop()) {
-+		schedule();
-+		set_current_state(TASK_UNINTERRUPTIBLE);
-+	}
-+
-+	/* Make sure grab_lock is seen before we see a stale completion */
-+	smp_mb();
-+
-+	/*
-+	 * Now just before cpu_down() enters stop machine, we need to make
-+	 * sure all tasks that are in pinned CPU sections are out, and new
-+	 * tasks will now grab the lock, keeping them from entering pinned
-+	 * CPU sections.
-+	 */
-+	if (!kthread_should_stop()) {
-+		preempt_disable();
-+		wait_for_pinned_cpus(hp);
-+		preempt_enable();
-+		complete(&hp->synced);
-+	}
-+
-+	set_current_state(TASK_UNINTERRUPTIBLE);
-+	while (!kthread_should_stop()) {
-+		schedule();
-+		set_current_state(TASK_UNINTERRUPTIBLE);
-+	}
-+	set_current_state(TASK_RUNNING);
-+
-+	/*
-+	 * Force this thread off this CPU as it's going down and
-+	 * we don't want any more work on this CPU.
-+	 */
-+	current->flags &= ~PF_NO_SETAFFINITY;
-+	set_cpus_allowed_ptr(current, cpu_present_mask);
-+	migrate_me();
-+	return 0;
-+}
-+
-+static void __cpu_unplug_sync(struct hotplug_pcp *hp)
-+{
-+	wake_up_process(hp->sync_tsk);
-+	wait_for_completion(&hp->synced);
-+}
-+
-+static void __cpu_unplug_wait(unsigned int cpu)
-+{
-+	struct hotplug_pcp *hp = &per_cpu(hotplug_pcp, cpu);
-+
-+	complete(&hp->unplug_wait);
-+	wait_for_completion(&hp->synced);
-+}
-+
-+/*
-+ * Start the sync_unplug_thread on the target cpu and wait for it to
-+ * complete.
-+ */
-+static int cpu_unplug_begin(unsigned int cpu)
-+{
-+	struct hotplug_pcp *hp = &per_cpu(hotplug_pcp, cpu);
-+	int err;
-+
-+	/* Protected by cpu_hotplug.lock */
-+	if (!hp->mutex_init) {
-+#ifdef CONFIG_PREEMPT_RT_FULL
-+		spin_lock_init(&hp->lock);
-+#else
-+		mutex_init(&hp->mutex);
-+#endif
-+		hp->mutex_init = 1;
-+	}
-+
-+	/* Inform the scheduler to migrate tasks off this CPU */
-+	tell_sched_cpu_down_begin(cpu);
-+
-+	init_completion(&hp->synced);
-+	init_completion(&hp->unplug_wait);
-+
-+	hp->sync_tsk = kthread_create(sync_unplug_thread, hp, "sync_unplug/%d", cpu);
-+	if (IS_ERR(hp->sync_tsk)) {
-+		err = PTR_ERR(hp->sync_tsk);
-+		hp->sync_tsk = NULL;
-+		return err;
-+	}
-+	kthread_bind(hp->sync_tsk, cpu);
-+
-+	/*
-+	 * Wait for tasks to get out of the pinned sections,
-+	 * it's still OK if new tasks enter. Some CPU notifiers will
-+	 * wait for tasks that are going to enter these sections and
-+	 * we must not have them block.
-+	 */
-+	wake_up_process(hp->sync_tsk);
-+	return 0;
-+}
-+
-+static void cpu_unplug_sync(unsigned int cpu)
-+{
-+	struct hotplug_pcp *hp = &per_cpu(hotplug_pcp, cpu);
-+
-+	init_completion(&hp->synced);
-+	/* The completion needs to be initialzied before setting grab_lock */
-+	smp_wmb();
-+
-+	/* Grab the mutex before setting grab_lock */
-+	hotplug_lock(hp);
-+	hp->grab_lock = 1;
-+
-+	/*
-+	 * The CPU notifiers have been completed.
-+	 * Wait for tasks to get out of pinned CPU sections and have new
-+	 * tasks block until the CPU is completely down.
-+	 */
-+	__cpu_unplug_sync(hp);
-+
-+	/* All done with the sync thread */
-+	kthread_stop(hp->sync_tsk);
-+	hp->sync_tsk = NULL;
-+}
-+
-+static void cpu_unplug_done(unsigned int cpu)
-+{
-+	struct hotplug_pcp *hp = &per_cpu(hotplug_pcp, cpu);
-+
-+	hp->unplug = NULL;
-+	/* Let all tasks know cpu unplug is finished before cleaning up */
-+	smp_wmb();
-+
-+	if (hp->sync_tsk)
-+		kthread_stop(hp->sync_tsk);
-+
-+	if (hp->grab_lock) {
-+		hotplug_unlock(hp);
-+		/* protected by cpu_hotplug.lock */
-+		hp->grab_lock = 0;
-+	}
-+	tell_sched_cpu_down_done(cpu);
-+}
- 
- void get_online_cpus(void)
  {
-@@ -344,13 +627,25 @@ void cpu_hotplug_enable(void)
+-	cpu_hotplug.active_writer = NULL;
+-	mutex_unlock(&cpu_hotplug.lock);
+-	cpuhp_lock_release();
++#ifdef CONFIG_PREEMPT_RT_FULL
++	struct rt_rw_lock *cpuhp_pin = this_cpu_ptr(&cpuhp_pin_lock);
++
++	if (WARN_ON(current->pinned_on_cpu != smp_processor_id()))
++		cpuhp_pin = per_cpu_ptr(&cpuhp_pin_lock, current->pinned_on_cpu);
++
++	current->pinned_on_cpu = -1;
++	__read_rt_unlock(cpuhp_pin);
++#endif
++}
++
++DEFINE_STATIC_PERCPU_RWSEM(cpu_hotplug_lock);
++
++void cpus_read_lock(void)
++{
++	percpu_down_read(&cpu_hotplug_lock);
++}
++EXPORT_SYMBOL_GPL(cpus_read_lock);
++
++void cpus_read_unlock(void)
++{
++	percpu_up_read(&cpu_hotplug_lock);
++}
++EXPORT_SYMBOL_GPL(cpus_read_unlock);
++
++void cpus_write_lock(void)
++{
++	percpu_down_write(&cpu_hotplug_lock);
++}
++
++void cpus_write_unlock(void)
++{
++	percpu_up_write(&cpu_hotplug_lock);
++}
++
++void lockdep_assert_cpus_held(void)
++{
++	percpu_rwsem_assert_held(&cpu_hotplug_lock);
+ }
+ 
+ /*
+@@ -344,13 +325,25 @@ void cpu_hotplug_enable(void)
  EXPORT_SYMBOL_GPL(cpu_hotplug_enable);
  #endif	/* CONFIG_HOTPLUG_CPU */
  
@@ -13305,7 +14409,7 @@ index e27838ab275d..0ec552a7c156 100644
  	return st->result;
  }
  
-@@ -371,9 +666,7 @@ static int bringup_cpu(unsigned int cpu)
+@@ -371,9 +364,7 @@ static int bringup_cpu(unsigned int cpu)
  	irq_unlock_sparse();
  	if (ret)
  		return ret;
@@ -13316,80 +14420,100 @@ index e27838ab275d..0ec552a7c156 100644
  }
  
  /*
-@@ -688,10 +981,14 @@ static int takedown_cpu(unsigned int cpu)
+@@ -484,6 +475,7 @@ static void cpuhp_thread_fun(unsigned int cpu)
+ 
+ 	st->should_run = false;
+ 
++	lock_map_acquire(&cpuhp_state_lock_map);
+ 	/* Single callback invocation for [un]install ? */
+ 	if (st->single) {
+ 		if (st->cb_state < CPUHP_AP_ONLINE) {
+@@ -510,6 +502,7 @@ static void cpuhp_thread_fun(unsigned int cpu)
+ 		else if (st->state > st->target)
+ 			ret = cpuhp_ap_offline(cpu, st);
+ 	}
++	lock_map_release(&cpuhp_state_lock_map);
+ 	st->result = ret;
+ 	complete(&st->done);
+ }
+@@ -524,6 +517,9 @@ cpuhp_invoke_ap_callback(int cpu, enum cpuhp_state state, bool bringup,
+ 	if (!cpu_online(cpu))
+ 		return 0;
+ 
++	lock_map_acquire(&cpuhp_state_lock_map);
++	lock_map_release(&cpuhp_state_lock_map);
++
+ 	/*
+ 	 * If we are up and running, use the hotplug thread. For early calls
+ 	 * we invoke the thread function directly.
+@@ -567,6 +563,8 @@ static int cpuhp_kick_ap_work(unsigned int cpu)
+ 	enum cpuhp_state state = st->state;
+ 
+ 	trace_cpuhp_enter(cpu, st->target, state, cpuhp_kick_ap_work);
++	lock_map_acquire(&cpuhp_state_lock_map);
++	lock_map_release(&cpuhp_state_lock_map);
+ 	__cpuhp_kick_ap_work(st);
+ 	wait_for_completion(&st->done);
+ 	trace_cpuhp_exit(cpu, st->state, state, st->result);
+@@ -685,6 +683,9 @@ static int take_cpu_down(void *_param)
+ 
+ static int takedown_cpu(unsigned int cpu)
+ {
++#ifdef CONFIG_PREEMPT_RT_FULL
++	struct rt_rw_lock *cpuhp_pin = per_cpu_ptr(&cpuhp_pin_lock, cpu);
++#endif
  	struct cpuhp_cpu_state *st = per_cpu_ptr(&cpuhp_state, cpu);
  	int err;
  
-+	__cpu_unplug_wait(cpu);
- 	/* Park the smpboot threads */
- 	kthread_park(per_cpu_ptr(&cpuhp_state, cpu)->thread);
- 	smpboot_park_threads(cpu);
+@@ -698,11 +699,18 @@ static int takedown_cpu(unsigned int cpu)
+ 	 */
+ 	irq_lock_sparse();
  
-+	/* Notifiers are done. Don't let any more tasks pin this CPU. */
-+	cpu_unplug_sync(cpu);
++#ifdef CONFIG_PREEMPT_RT_FULL
++	__write_rt_lock(cpuhp_pin);
++#endif
 +
  	/*
- 	 * Prevent irq alloc/free while the dying cpu reorganizes the
- 	 * interrupt affinities.
-@@ -766,6 +1063,9 @@ static int __ref _cpu_down(unsigned int cpu, int tasks_frozen,
- {
- 	struct cpuhp_cpu_state *st = per_cpu_ptr(&cpuhp_state, cpu);
- 	int prev_state, ret = 0;
-+	int mycpu;
-+	cpumask_var_t cpumask;
-+	cpumask_var_t cpumask_org;
+ 	 * So now all preempt/rcu users must observe !cpu_active().
+ 	 */
+-	err = stop_machine(take_cpu_down, NULL, cpumask_of(cpu));
++	err = stop_machine_cpuslocked(take_cpu_down, NULL, cpumask_of(cpu));
+ 	if (err) {
++#ifdef CONFIG_PREEMPT_RT_FULL
++		__write_rt_unlock(cpuhp_pin);
++#endif
+ 		/* CPU refused to die */
+ 		irq_unlock_sparse();
+ 		/* Unpark the hotplug thread so we can rollback there */
+@@ -721,6 +729,9 @@ static int takedown_cpu(unsigned int cpu)
+ 	wait_for_completion(&st->done);
+ 	BUG_ON(st->state != CPUHP_AP_IDLE_DEAD);
  
- 	if (num_online_cpus() == 1)
- 		return -EBUSY;
-@@ -773,7 +1073,34 @@ static int __ref _cpu_down(unsigned int cpu, int tasks_frozen,
++#ifdef CONFIG_PREEMPT_RT_FULL
++	__write_rt_unlock(cpuhp_pin);
++#endif
+ 	/* Interrupts are moved away from the dying cpu, reenable alloc/free */
+ 	irq_unlock_sparse();
+ 
+@@ -773,7 +784,7 @@ static int __ref _cpu_down(unsigned int cpu, int tasks_frozen,
  	if (!cpu_present(cpu))
  		return -EINVAL;
  
-+	/* Move the downtaker off the unplug cpu */
-+	if (!alloc_cpumask_var(&cpumask, GFP_KERNEL))
-+		return -ENOMEM;
-+	if (!alloc_cpumask_var(&cpumask_org, GFP_KERNEL))  {
-+		free_cpumask_var(cpumask);
-+		return -ENOMEM;
-+	}
-+
-+	cpumask_copy(cpumask_org, &current->cpus_mask);
-+	cpumask_andnot(cpumask, cpu_online_mask, cpumask_of(cpu));
-+	set_cpus_allowed_ptr(current, cpumask);
-+	free_cpumask_var(cpumask);
-+	migrate_disable();
-+	mycpu = smp_processor_id();
-+	if (mycpu == cpu) {
-+		printk(KERN_ERR "Yuck! Still on unplug CPU\n!");
-+		migrate_enable();
-+		ret = -EBUSY;
-+		goto restore_cpus;
-+	}
-+
-+	migrate_enable();
- 	cpu_hotplug_begin();
-+	ret = cpu_unplug_begin(cpu);
-+	if (ret) {
-+		printk("cpu_unplug_begin(%d) failed\n", cpu);
-+		goto out_cancel;
-+	}
+-	cpu_hotplug_begin();
++	cpus_write_lock();
  
  	cpuhp_tasks_frozen = tasks_frozen;
  
-@@ -811,7 +1138,12 @@ static int __ref _cpu_down(unsigned int cpu, int tasks_frozen,
+@@ -811,7 +822,7 @@ static int __ref _cpu_down(unsigned int cpu, int tasks_frozen,
  	}
  
  out:
-+	cpu_unplug_done(cpu);
-+out_cancel:
- 	cpu_hotplug_done();
-+restore_cpus:
-+	set_cpus_allowed_ptr(current, cpumask_org);
-+	free_cpumask_var(cpumask_org);
+-	cpu_hotplug_done();
++	cpus_write_unlock();
  	return ret;
  }
  
-@@ -859,31 +1191,20 @@ void notify_cpu_starting(unsigned int cpu)
+@@ -859,31 +870,20 @@ void notify_cpu_starting(unsigned int cpu)
  }
  
  /*
@@ -13425,7 +14549,25 @@ index e27838ab275d..0ec552a7c156 100644
  }
  
  /* Requires cpu_add_remove_lock to be held */
-@@ -1125,6 +1446,8 @@ core_initcall(cpu_hotplug_pm_sync_init);
+@@ -893,7 +893,7 @@ static int _cpu_up(unsigned int cpu, int tasks_frozen, enum cpuhp_state target)
+ 	struct task_struct *idle;
+ 	int ret = 0;
+ 
+-	cpu_hotplug_begin();
++	cpus_write_lock();
+ 
+ 	if (!cpu_present(cpu)) {
+ 		ret = -EINVAL;
+@@ -941,7 +941,7 @@ static int _cpu_up(unsigned int cpu, int tasks_frozen, enum cpuhp_state target)
+ 	target = min((int)target, CPUHP_BRINGUP_CPU);
+ 	ret = cpuhp_up_callbacks(cpu, st, target);
+ out:
+-	cpu_hotplug_done();
++	cpus_write_unlock();
+ 	return ret;
+ }
+ 
+@@ -1125,6 +1125,8 @@ core_initcall(cpu_hotplug_pm_sync_init);
  
  #endif /* CONFIG_PM_SLEEP_SMP */
  
@@ -13434,7 +14576,182 @@ index e27838ab275d..0ec552a7c156 100644
  #endif /* CONFIG_SMP */
  
  /* Boot processor state steps */
-@@ -1815,6 +2138,10 @@ void __init boot_cpu_init(void)
+@@ -1411,18 +1413,20 @@ static void cpuhp_rollback_install(int failedcpu, enum cpuhp_state state,
+ 	}
+ }
+ 
+-int __cpuhp_state_add_instance(enum cpuhp_state state, struct hlist_node *node,
+-			       bool invoke)
++int __cpuhp_state_add_instance_cpuslocked(enum cpuhp_state state,
++					  struct hlist_node *node,
++					  bool invoke)
+ {
+ 	struct cpuhp_step *sp;
+ 	int cpu;
+ 	int ret;
+ 
++	lockdep_assert_cpus_held();
++
+ 	sp = cpuhp_get_step(state);
+ 	if (sp->multi_instance == false)
+ 		return -EINVAL;
+ 
+-	get_online_cpus();
+ 	mutex_lock(&cpuhp_state_mutex);
+ 
+ 	if (!invoke || !sp->startup.multi)
+@@ -1451,13 +1455,23 @@ int __cpuhp_state_add_instance(enum cpuhp_state state, struct hlist_node *node,
+ 	hlist_add_head(node, &sp->list);
+ unlock:
+ 	mutex_unlock(&cpuhp_state_mutex);
+-	put_online_cpus();
++	return ret;
++}
++
++int __cpuhp_state_add_instance(enum cpuhp_state state, struct hlist_node *node,
++			       bool invoke)
++{
++	int ret;
++
++	cpus_read_lock();
++	ret = __cpuhp_state_add_instance_cpuslocked(state, node, invoke);
++	cpus_read_unlock();
+ 	return ret;
+ }
+ EXPORT_SYMBOL_GPL(__cpuhp_state_add_instance);
+ 
+ /**
+- * __cpuhp_setup_state - Setup the callbacks for an hotplug machine state
++ * __cpuhp_setup_state_cpuslocked - Setup the callbacks for an hotplug machine state
+  * @state:		The state to setup
+  * @invoke:		If true, the startup function is invoked for cpus where
+  *			cpu state >= @state
+@@ -1466,25 +1480,27 @@ EXPORT_SYMBOL_GPL(__cpuhp_state_add_instance);
+  * @multi_instance:	State is set up for multiple instances which get
+  *			added afterwards.
+  *
++ * The caller needs to hold cpus read locked while calling this function.
+  * Returns:
+  *   On success:
+  *      Positive state number if @state is CPUHP_AP_ONLINE_DYN
+  *      0 for all other states
+  *   On failure: proper (negative) error code
+  */
+-int __cpuhp_setup_state(enum cpuhp_state state,
+-			const char *name, bool invoke,
+-			int (*startup)(unsigned int cpu),
+-			int (*teardown)(unsigned int cpu),
+-			bool multi_instance)
++int __cpuhp_setup_state_cpuslocked(enum cpuhp_state state,
++				   const char *name, bool invoke,
++				   int (*startup)(unsigned int cpu),
++				   int (*teardown)(unsigned int cpu),
++				   bool multi_instance)
+ {
+ 	int cpu, ret = 0;
+ 	bool dynstate;
+ 
++	lockdep_assert_cpus_held();
++
+ 	if (cpuhp_cb_check(state) || !name)
+ 		return -EINVAL;
+ 
+-	get_online_cpus();
+ 	mutex_lock(&cpuhp_state_mutex);
+ 
+ 	ret = cpuhp_store_callbacks(state, name, startup, teardown,
+@@ -1520,7 +1536,6 @@ int __cpuhp_setup_state(enum cpuhp_state state,
+ 	}
+ out:
+ 	mutex_unlock(&cpuhp_state_mutex);
+-	put_online_cpus();
+ 	/*
+ 	 * If the requested state is CPUHP_AP_ONLINE_DYN, return the
+ 	 * dynamically allocated state in case of success.
+@@ -1529,6 +1544,22 @@ int __cpuhp_setup_state(enum cpuhp_state state,
+ 		return state;
+ 	return ret;
+ }
++EXPORT_SYMBOL(__cpuhp_setup_state_cpuslocked);
++
++int __cpuhp_setup_state(enum cpuhp_state state,
++			const char *name, bool invoke,
++			int (*startup)(unsigned int cpu),
++			int (*teardown)(unsigned int cpu),
++			bool multi_instance)
++{
++	int ret;
++
++	cpus_read_lock();
++	ret = __cpuhp_setup_state_cpuslocked(state, name, invoke, startup,
++					     teardown, multi_instance);
++	cpus_read_unlock();
++	return ret;
++}
+ EXPORT_SYMBOL(__cpuhp_setup_state);
+ 
+ int __cpuhp_state_remove_instance(enum cpuhp_state state,
+@@ -1542,7 +1573,7 @@ int __cpuhp_state_remove_instance(enum cpuhp_state state,
+ 	if (!sp->multi_instance)
+ 		return -EINVAL;
+ 
+-	get_online_cpus();
++	cpus_read_lock();
+ 	mutex_lock(&cpuhp_state_mutex);
+ 
+ 	if (!invoke || !cpuhp_get_teardown_cb(state))
+@@ -1563,29 +1594,30 @@ int __cpuhp_state_remove_instance(enum cpuhp_state state,
+ remove:
+ 	hlist_del(node);
+ 	mutex_unlock(&cpuhp_state_mutex);
+-	put_online_cpus();
++	cpus_read_unlock();
+ 
+ 	return 0;
+ }
+ EXPORT_SYMBOL_GPL(__cpuhp_state_remove_instance);
+ 
+ /**
+- * __cpuhp_remove_state - Remove the callbacks for an hotplug machine state
++ * __cpuhp_remove_state_cpuslocked - Remove the callbacks for an hotplug machine state
+  * @state:	The state to remove
+  * @invoke:	If true, the teardown function is invoked for cpus where
+  *		cpu state >= @state
+  *
++ * The caller needs to hold cpus read locked while calling this function.
+  * The teardown callback is currently not allowed to fail. Think
+  * about module removal!
+  */
+-void __cpuhp_remove_state(enum cpuhp_state state, bool invoke)
++void __cpuhp_remove_state_cpuslocked(enum cpuhp_state state, bool invoke)
+ {
+ 	struct cpuhp_step *sp = cpuhp_get_step(state);
+ 	int cpu;
+ 
+ 	BUG_ON(cpuhp_cb_check(state));
+ 
+-	get_online_cpus();
++	lockdep_assert_cpus_held();
+ 
+ 	mutex_lock(&cpuhp_state_mutex);
+ 	if (sp->multi_instance) {
+@@ -1613,7 +1645,14 @@ void __cpuhp_remove_state(enum cpuhp_state state, bool invoke)
+ remove:
+ 	cpuhp_store_callbacks(state, NULL, NULL, NULL, false);
+ 	mutex_unlock(&cpuhp_state_mutex);
+-	put_online_cpus();
++}
++EXPORT_SYMBOL(__cpuhp_remove_state_cpuslocked);
++
++void __cpuhp_remove_state(enum cpuhp_state state, bool invoke)
++{
++	cpus_read_lock();
++	__cpuhp_remove_state_cpuslocked(state, invoke);
++	cpus_read_unlock();
+ }
+ EXPORT_SYMBOL(__cpuhp_remove_state);
+ 
+@@ -1815,6 +1854,10 @@ void __init boot_cpu_init(void)
  	set_cpu_active(cpu, true);
  	set_cpu_present(cpu, true);
  	set_cpu_possible(cpu, true);
@@ -13634,10 +14951,18 @@ index 4a1c33416b6a..0bd18df7c2cb 100644
  }
  
 diff --git a/kernel/events/core.c b/kernel/events/core.c
-index 95c7fa675009..5fad9843084d 100644
+index 95c7fa675009..94c34ef6e6a4 100644
 --- a/kernel/events/core.c
 +++ b/kernel/events/core.c
-@@ -1043,6 +1043,7 @@ static void __perf_mux_hrtimer_init(struct perf_cpu_context *cpuctx, int cpu)
+@@ -386,6 +386,7 @@ static atomic_t nr_switch_events __read_mostly;
+ static LIST_HEAD(pmus);
+ static DEFINE_MUTEX(pmus_lock);
+ static struct srcu_struct pmus_srcu;
++static cpumask_var_t perf_online_mask;
+ 
+ /*
+  * perf event paranoia level:
+@@ -1043,6 +1044,7 @@ static void __perf_mux_hrtimer_init(struct perf_cpu_context *cpuctx, int cpu)
  	raw_spin_lock_init(&cpuctx->hrtimer_lock);
  	hrtimer_init(timer, CLOCK_MONOTONIC, HRTIMER_MODE_ABS_PINNED);
  	timer->function = perf_mux_hrtimer_handler;
@@ -13645,7 +14970,61 @@ index 95c7fa675009..5fad9843084d 100644
  }
  
  static int perf_mux_hrtimer_restart(struct perf_cpu_context *cpuctx)
-@@ -8495,6 +8496,7 @@ static void perf_swevent_init_hrtimer(struct perf_event *event)
+@@ -3809,14 +3811,6 @@ find_get_context(struct pmu *pmu, struct task_struct *task,
+ 		if (perf_paranoid_cpu() && !capable(CAP_SYS_ADMIN))
+ 			return ERR_PTR(-EACCES);
+ 
+-		/*
+-		 * We could be clever and allow to attach a event to an
+-		 * offline CPU and activate it when the CPU comes up, but
+-		 * that's for later.
+-		 */
+-		if (!cpu_online(cpu))
+-			return ERR_PTR(-ENODEV);
+-
+ 		cpuctx = per_cpu_ptr(pmu->pmu_cpu_context, cpu);
+ 		ctx = &cpuctx->ctx;
+ 		get_ctx(ctx);
+@@ -7592,7 +7586,8 @@ static int swevent_hlist_get_cpu(int cpu)
+ 	int err = 0;
+ 
+ 	mutex_lock(&swhash->hlist_mutex);
+-	if (!swevent_hlist_deref(swhash) && cpu_online(cpu)) {
++	if (!swevent_hlist_deref(swhash) &&
++	    cpumask_test_cpu(cpu, perf_online_mask)) {
+ 		struct swevent_hlist *hlist;
+ 
+ 		hlist = kzalloc(sizeof(*hlist), GFP_KERNEL);
+@@ -7613,7 +7608,7 @@ static int swevent_hlist_get(void)
+ {
+ 	int err, cpu, failed_cpu;
+ 
+-	get_online_cpus();
++	mutex_lock(&pmus_lock);
+ 	for_each_possible_cpu(cpu) {
+ 		err = swevent_hlist_get_cpu(cpu);
+ 		if (err) {
+@@ -7621,8 +7616,7 @@ static int swevent_hlist_get(void)
+ 			goto fail;
+ 		}
+ 	}
+-	put_online_cpus();
+-
++	mutex_unlock(&pmus_lock);
+ 	return 0;
+ fail:
+ 	for_each_possible_cpu(cpu) {
+@@ -7630,8 +7624,7 @@ static int swevent_hlist_get(void)
+ 			break;
+ 		swevent_hlist_put_cpu(cpu);
+ 	}
+-
+-	put_online_cpus();
++	mutex_unlock(&pmus_lock);
+ 	return err;
+ }
+ 
+@@ -8495,6 +8488,7 @@ static void perf_swevent_init_hrtimer(struct perf_event *event)
  
  	hrtimer_init(&hwc->hrtimer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
  	hwc->hrtimer.function = perf_swevent_hrtimer;
@@ -13653,6 +15032,194 @@ index 95c7fa675009..5fad9843084d 100644
  
  	/*
  	 * Since hrtimers have a fixed rate, we can do a static freq->period
+@@ -8809,7 +8803,7 @@ perf_event_mux_interval_ms_store(struct device *dev,
+ 	pmu->hrtimer_interval_ms = timer;
+ 
+ 	/* update all cpuctx for this PMU */
+-	get_online_cpus();
++	cpus_read_lock();
+ 	for_each_online_cpu(cpu) {
+ 		struct perf_cpu_context *cpuctx;
+ 		cpuctx = per_cpu_ptr(pmu->pmu_cpu_context, cpu);
+@@ -8818,7 +8812,7 @@ perf_event_mux_interval_ms_store(struct device *dev,
+ 		cpu_function_call(cpu,
+ 			(remote_function_f)perf_mux_hrtimer_restart, cpuctx);
+ 	}
+-	put_online_cpus();
++	cpus_read_unlock();
+ 	mutex_unlock(&mux_interval_mutex);
+ 
+ 	return count;
+@@ -8948,6 +8942,7 @@ int perf_pmu_register(struct pmu *pmu, const char *name, int type)
+ 		lockdep_set_class(&cpuctx->ctx.mutex, &cpuctx_mutex);
+ 		lockdep_set_class(&cpuctx->ctx.lock, &cpuctx_lock);
+ 		cpuctx->ctx.pmu = pmu;
++		cpuctx->online = cpumask_test_cpu(cpu, perf_online_mask);
+ 
+ 		__perf_mux_hrtimer_init(cpuctx, cpu);
+ 	}
+@@ -9764,12 +9759,10 @@ SYSCALL_DEFINE5(perf_event_open,
+ 		goto err_task;
+ 	}
+ 
+-	get_online_cpus();
+-
+ 	if (task) {
+ 		err = mutex_lock_interruptible(&task->signal->cred_guard_mutex);
+ 		if (err)
+-			goto err_cpus;
++			goto err_cred;
+ 
+ 		/*
+ 		 * Reuse ptrace permission checks for now.
+@@ -9955,6 +9948,23 @@ SYSCALL_DEFINE5(perf_event_open,
+ 		goto err_locked;
+ 	}
+ 
++	if (!task) {
++		/*
++		 * Check if the @cpu we're creating an event for is online.
++		 *
++		 * We use the perf_cpu_context::ctx::mutex to serialize against
++		 * the hotplug notifiers. See perf_event_{init,exit}_cpu().
++		 */
++		struct perf_cpu_context *cpuctx =
++			container_of(ctx, struct perf_cpu_context, ctx);
++
++		if (!cpuctx->online) {
++			err = -ENODEV;
++			goto err_locked;
++		}
++	}
++
++
+ 	/*
+ 	 * Must be under the same ctx::mutex as perf_install_in_context(),
+ 	 * because we need to serialize with concurrent event creation.
+@@ -10044,8 +10054,6 @@ SYSCALL_DEFINE5(perf_event_open,
+ 		put_task_struct(task);
+ 	}
+ 
+-	put_online_cpus();
+-
+ 	mutex_lock(&current->perf_event_mutex);
+ 	list_add_tail(&event->owner_entry, &current->perf_event_list);
+ 	mutex_unlock(&current->perf_event_mutex);
+@@ -10079,8 +10087,6 @@ SYSCALL_DEFINE5(perf_event_open,
+ err_cred:
+ 	if (task)
+ 		mutex_unlock(&task->signal->cred_guard_mutex);
+-err_cpus:
+-	put_online_cpus();
+ err_task:
+ 	if (task)
+ 		put_task_struct(task);
+@@ -10135,6 +10141,21 @@ perf_event_create_kernel_counter(struct perf_event_attr *attr, int cpu,
+ 		goto err_unlock;
+ 	}
+ 
++	if (!task) {
++		/*
++		 * Check if the @cpu we're creating an event for is online.
++		 *
++		 * We use the perf_cpu_context::ctx::mutex to serialize against
++		 * the hotplug notifiers. See perf_event_{init,exit}_cpu().
++		 */
++		struct perf_cpu_context *cpuctx =
++			container_of(ctx, struct perf_cpu_context, ctx);
++		if (!cpuctx->online) {
++			err = -ENODEV;
++			goto err_unlock;
++		}
++	}
++
+ 	if (!exclusive_event_installable(event, ctx)) {
+ 		err = -EBUSY;
+ 		goto err_unlock;
+@@ -10802,6 +10823,8 @@ static void __init perf_event_init_all_cpus(void)
+ 	struct swevent_htable *swhash;
+ 	int cpu;
+ 
++	zalloc_cpumask_var(&perf_online_mask, GFP_KERNEL);
++
+ 	for_each_possible_cpu(cpu) {
+ 		swhash = &per_cpu(swevent_htable, cpu);
+ 		mutex_init(&swhash->hlist_mutex);
+@@ -10817,7 +10840,7 @@ static void __init perf_event_init_all_cpus(void)
+ 	}
+ }
+ 
+-int perf_event_init_cpu(unsigned int cpu)
++void perf_swevent_init_cpu(unsigned int cpu)
+ {
+ 	struct swevent_htable *swhash = &per_cpu(swevent_htable, cpu);
+ 
+@@ -10830,7 +10853,6 @@ int perf_event_init_cpu(unsigned int cpu)
+ 		rcu_assign_pointer(swhash->swevent_hlist, hlist);
+ 	}
+ 	mutex_unlock(&swhash->hlist_mutex);
+-	return 0;
+ }
+ 
+ #if defined CONFIG_HOTPLUG_CPU || defined CONFIG_KEXEC_CORE
+@@ -10848,19 +10870,22 @@ static void __perf_event_exit_context(void *__info)
+ 
+ static void perf_event_exit_cpu_context(int cpu)
+ {
++	struct perf_cpu_context *cpuctx;
+ 	struct perf_event_context *ctx;
+ 	struct pmu *pmu;
+-	int idx;
+ 
+-	idx = srcu_read_lock(&pmus_srcu);
+-	list_for_each_entry_rcu(pmu, &pmus, entry) {
+-		ctx = &per_cpu_ptr(pmu->pmu_cpu_context, cpu)->ctx;
++	mutex_lock(&pmus_lock);
++	list_for_each_entry(pmu, &pmus, entry) {
++		cpuctx = per_cpu_ptr(pmu->pmu_cpu_context, cpu);
++		ctx = &cpuctx->ctx;
+ 
+ 		mutex_lock(&ctx->mutex);
+ 		smp_call_function_single(cpu, __perf_event_exit_context, ctx, 1);
++		cpuctx->online = 0;
+ 		mutex_unlock(&ctx->mutex);
+ 	}
+-	srcu_read_unlock(&pmus_srcu, idx);
++	cpumask_clear_cpu(cpu, perf_online_mask);
++	mutex_unlock(&pmus_lock);
+ }
+ #else
+ 
+@@ -10868,6 +10893,29 @@ static void perf_event_exit_cpu_context(int cpu) { }
+ 
+ #endif
+ 
++int perf_event_init_cpu(unsigned int cpu)
++{
++	struct perf_cpu_context *cpuctx;
++	struct perf_event_context *ctx;
++	struct pmu *pmu;
++
++	perf_swevent_init_cpu(cpu);
++
++	mutex_lock(&pmus_lock);
++	cpumask_set_cpu(cpu, perf_online_mask);
++	list_for_each_entry(pmu, &pmus, entry) {
++		cpuctx = per_cpu_ptr(pmu->pmu_cpu_context, cpu);
++		ctx = &cpuctx->ctx;
++
++		mutex_lock(&ctx->mutex);
++		cpuctx->online = 1;
++		mutex_unlock(&ctx->mutex);
++	}
++	mutex_unlock(&pmus_lock);
++
++	return 0;
++}
++
+ int perf_event_exit_cpu(unsigned int cpu)
+ {
+ 	perf_event_exit_cpu_context(cpu);
 diff --git a/kernel/exit.c b/kernel/exit.c
 index 516acdb0e0ec..e8c8f882b930 100644
 --- a/kernel/exit.c
@@ -13667,10 +15234,10 @@ index 516acdb0e0ec..e8c8f882b930 100644
  	spin_unlock(&sighand->siglock);
  
 diff --git a/kernel/extable.c b/kernel/extable.c
-index 2676d7f8baf6..0fbdd8582f08 100644
+index 4efaf26d7def..223df4a328a4 100644
 --- a/kernel/extable.c
 +++ b/kernel/extable.c
-@@ -75,7 +75,7 @@ int core_kernel_text(unsigned long addr)
+@@ -75,7 +75,7 @@ int notrace core_kernel_text(unsigned long addr)
  	    addr < (unsigned long)_etext)
  		return 1;
  
@@ -15224,6 +16791,325 @@ index bcf107ce0854..2899ba0d23d1 100644
  
  /*
   * Synchronize against the irq_work @entry, ensures the entry is not
+diff --git a/kernel/jump_label.c b/kernel/jump_label.c
+index 6c9cb208ac48..d11c506a6ac3 100644
+--- a/kernel/jump_label.c
++++ b/kernel/jump_label.c
+@@ -15,6 +15,7 @@
+ #include <linux/static_key.h>
+ #include <linux/jump_label_ratelimit.h>
+ #include <linux/bug.h>
++#include <linux/cpu.h>
+ 
+ #ifdef HAVE_JUMP_LABEL
+ 
+@@ -124,6 +125,7 @@ void static_key_slow_inc(struct static_key *key)
+ 			return;
+ 	}
+ 
++	cpus_read_lock();
+ 	jump_label_lock();
+ 	if (atomic_read(&key->enabled) == 0) {
+ 		atomic_set(&key->enabled, -1);
+@@ -133,12 +135,14 @@ void static_key_slow_inc(struct static_key *key)
+ 		atomic_inc(&key->enabled);
+ 	}
+ 	jump_label_unlock();
++	cpus_read_unlock();
+ }
+ EXPORT_SYMBOL_GPL(static_key_slow_inc);
+ 
+ static void __static_key_slow_dec(struct static_key *key,
+ 		unsigned long rate_limit, struct delayed_work *work)
+ {
++	cpus_read_lock();
+ 	/*
+ 	 * The negative count check is valid even when a negative
+ 	 * key->enabled is in use by static_key_slow_inc(); a
+@@ -149,6 +153,7 @@ static void __static_key_slow_dec(struct static_key *key,
+ 	if (!atomic_dec_and_mutex_lock(&key->enabled, &jump_label_mutex)) {
+ 		WARN(atomic_read(&key->enabled) < 0,
+ 		     "jump label: negative count!\n");
++		cpus_read_unlock();
+ 		return;
+ 	}
+ 
+@@ -159,6 +164,7 @@ static void __static_key_slow_dec(struct static_key *key,
+ 		jump_label_update(key);
+ 	}
+ 	jump_label_unlock();
++	cpus_read_unlock();
+ }
+ 
+ static void jump_label_update_timeout(struct work_struct *work)
+@@ -334,6 +340,7 @@ void __init jump_label_init(void)
+ 	if (static_key_initialized)
+ 		return;
+ 
++	cpus_read_lock();
+ 	jump_label_lock();
+ 	jump_label_sort_entries(iter_start, iter_stop);
+ 
+@@ -353,6 +360,7 @@ void __init jump_label_init(void)
+ 	}
+ 	static_key_initialized = true;
+ 	jump_label_unlock();
++	cpus_read_unlock();
+ }
+ 
+ #ifdef CONFIG_MODULES
+@@ -590,28 +598,28 @@ jump_label_module_notify(struct notifier_block *self, unsigned long val,
+ 	struct module *mod = data;
+ 	int ret = 0;
+ 
++	cpus_read_lock();
++	jump_label_lock();
++
+ 	switch (val) {
+ 	case MODULE_STATE_COMING:
+-		jump_label_lock();
+ 		ret = jump_label_add_module(mod);
+ 		if (ret) {
+ 			WARN(1, "Failed to allocatote memory: jump_label may not work properly.\n");
+ 			jump_label_del_module(mod);
+ 		}
+-		jump_label_unlock();
+ 		break;
+ 	case MODULE_STATE_GOING:
+-		jump_label_lock();
+ 		jump_label_del_module(mod);
+-		jump_label_unlock();
+ 		break;
+ 	case MODULE_STATE_LIVE:
+-		jump_label_lock();
+ 		jump_label_invalidate_module_init(mod);
+-		jump_label_unlock();
+ 		break;
+ 	}
+ 
++	jump_label_unlock();
++	cpus_read_unlock();
++
+ 	return notifier_from_errno(ret);
+ }
+ 
+diff --git a/kernel/kprobes.c b/kernel/kprobes.c
+index 74522da4d7cd..c1526e17d448 100644
+--- a/kernel/kprobes.c
++++ b/kernel/kprobes.c
+@@ -486,11 +486,6 @@ static DECLARE_DELAYED_WORK(optimizing_work, kprobe_optimizer);
+  */
+ static void do_optimize_kprobes(void)
+ {
+-	/* Optimization never be done when disarmed */
+-	if (kprobes_all_disarmed || !kprobes_allow_optimization ||
+-	    list_empty(&optimizing_list))
+-		return;
+-
+ 	/*
+ 	 * The optimization/unoptimization refers online_cpus via
+ 	 * stop_machine() and cpu-hotplug modifies online_cpus.
+@@ -498,14 +493,19 @@ static void do_optimize_kprobes(void)
+ 	 * This combination can cause a deadlock (cpu-hotplug try to lock
+ 	 * text_mutex but stop_machine can not be done because online_cpus
+ 	 * has been changed)
+-	 * To avoid this deadlock, we need to call get_online_cpus()
++	 * To avoid this deadlock, caller must have locked cpu hotplug
+ 	 * for preventing cpu-hotplug outside of text_mutex locking.
+ 	 */
+-	get_online_cpus();
++	lockdep_assert_cpus_held();
++
++	/* Optimization never be done when disarmed */
++	if (kprobes_all_disarmed || !kprobes_allow_optimization ||
++	    list_empty(&optimizing_list))
++		return;
++
+ 	mutex_lock(&text_mutex);
+ 	arch_optimize_kprobes(&optimizing_list);
+ 	mutex_unlock(&text_mutex);
+-	put_online_cpus();
+ }
+ 
+ /*
+@@ -516,12 +516,13 @@ static void do_unoptimize_kprobes(void)
+ {
+ 	struct optimized_kprobe *op, *tmp;
+ 
++	/* See comment in do_optimize_kprobes() */
++	lockdep_assert_cpus_held();
++
+ 	/* Unoptimization must be done anytime */
+ 	if (list_empty(&unoptimizing_list))
+ 		return;
+ 
+-	/* Ditto to do_optimize_kprobes */
+-	get_online_cpus();
+ 	mutex_lock(&text_mutex);
+ 	arch_unoptimize_kprobes(&unoptimizing_list, &freeing_list);
+ 	/* Loop free_list for disarming */
+@@ -540,7 +541,6 @@ static void do_unoptimize_kprobes(void)
+ 			list_del_init(&op->list);
+ 	}
+ 	mutex_unlock(&text_mutex);
+-	put_online_cpus();
+ }
+ 
+ /* Reclaim all kprobes on the free_list */
+@@ -565,6 +565,7 @@ static void kick_kprobe_optimizer(void)
+ static void kprobe_optimizer(struct work_struct *work)
+ {
+ 	mutex_lock(&kprobe_mutex);
++	cpus_read_lock();
+ 	/* Lock modules while optimizing kprobes */
+ 	mutex_lock(&module_mutex);
+ 
+@@ -590,6 +591,7 @@ static void kprobe_optimizer(struct work_struct *work)
+ 	do_free_cleaned_kprobes();
+ 
+ 	mutex_unlock(&module_mutex);
++	cpus_read_unlock();
+ 	mutex_unlock(&kprobe_mutex);
+ 
+ 	/* Step 5: Kick optimizer again if needed */
+@@ -653,9 +655,8 @@ static void optimize_kprobe(struct kprobe *p)
+ /* Short cut to direct unoptimizing */
+ static void force_unoptimize_kprobe(struct optimized_kprobe *op)
+ {
+-	get_online_cpus();
++	lockdep_assert_cpus_held();
+ 	arch_unoptimize_kprobe(op);
+-	put_online_cpus();
+ 	if (kprobe_disabled(&op->kp))
+ 		arch_disarm_kprobe(&op->kp);
+ }
+@@ -787,6 +788,7 @@ static void try_to_optimize_kprobe(struct kprobe *p)
+ 		return;
+ 
+ 	/* For preparing optimization, jump_label_text_reserved() is called */
++	cpus_read_lock();
+ 	jump_label_lock();
+ 	mutex_lock(&text_mutex);
+ 
+@@ -808,6 +810,7 @@ static void try_to_optimize_kprobe(struct kprobe *p)
+ out:
+ 	mutex_unlock(&text_mutex);
+ 	jump_label_unlock();
++	cpus_read_unlock();
+ }
+ 
+ #ifdef CONFIG_SYSCTL
+@@ -822,6 +825,7 @@ static void optimize_all_kprobes(void)
+ 	if (kprobes_allow_optimization)
+ 		goto out;
+ 
++	cpus_read_lock();
+ 	kprobes_allow_optimization = true;
+ 	for (i = 0; i < KPROBE_TABLE_SIZE; i++) {
+ 		head = &kprobe_table[i];
+@@ -829,6 +833,7 @@ static void optimize_all_kprobes(void)
+ 			if (!kprobe_disabled(p))
+ 				optimize_kprobe(p);
+ 	}
++	cpus_read_unlock();
+ 	printk(KERN_INFO "Kprobes globally optimized\n");
+ out:
+ 	mutex_unlock(&kprobe_mutex);
+@@ -847,6 +852,7 @@ static void unoptimize_all_kprobes(void)
+ 		return;
+ 	}
+ 
++	cpus_read_lock();
+ 	kprobes_allow_optimization = false;
+ 	for (i = 0; i < KPROBE_TABLE_SIZE; i++) {
+ 		head = &kprobe_table[i];
+@@ -855,6 +861,7 @@ static void unoptimize_all_kprobes(void)
+ 				unoptimize_kprobe(p, false);
+ 		}
+ 	}
++	cpus_read_unlock();
+ 	mutex_unlock(&kprobe_mutex);
+ 
+ 	/* Wait for unoptimizing completion */
+@@ -1006,14 +1013,11 @@ static void arm_kprobe(struct kprobe *kp)
+ 		arm_kprobe_ftrace(kp);
+ 		return;
+ 	}
+-	/*
+-	 * Here, since __arm_kprobe() doesn't use stop_machine(),
+-	 * this doesn't cause deadlock on text_mutex. So, we don't
+-	 * need get_online_cpus().
+-	 */
++	cpus_read_lock();
+ 	mutex_lock(&text_mutex);
+ 	__arm_kprobe(kp);
+ 	mutex_unlock(&text_mutex);
++	cpus_read_unlock();
+ }
+ 
+ /* Disarm a kprobe with text_mutex */
+@@ -1023,10 +1027,12 @@ static void disarm_kprobe(struct kprobe *kp, bool reopt)
+ 		disarm_kprobe_ftrace(kp);
+ 		return;
+ 	}
+-	/* Ditto */
++
++	cpus_read_lock();
+ 	mutex_lock(&text_mutex);
+ 	__disarm_kprobe(kp, reopt);
+ 	mutex_unlock(&text_mutex);
++	cpus_read_unlock();
+ }
+ 
+ /*
+@@ -1294,13 +1300,10 @@ static int register_aggr_kprobe(struct kprobe *orig_p, struct kprobe *p)
+ 	int ret = 0;
+ 	struct kprobe *ap = orig_p;
+ 
++	cpus_read_lock();
++
+ 	/* For preparing optimization, jump_label_text_reserved() is called */
+ 	jump_label_lock();
+-	/*
+-	 * Get online CPUs to avoid text_mutex deadlock.with stop machine,
+-	 * which is invoked by unoptimize_kprobe() in add_new_kprobe()
+-	 */
+-	get_online_cpus();
+ 	mutex_lock(&text_mutex);
+ 
+ 	if (!kprobe_aggrprobe(orig_p)) {
+@@ -1348,8 +1351,8 @@ static int register_aggr_kprobe(struct kprobe *orig_p, struct kprobe *p)
+ 
+ out:
+ 	mutex_unlock(&text_mutex);
+-	put_online_cpus();
+ 	jump_label_unlock();
++	cpus_read_unlock();
+ 
+ 	if (ret == 0 && kprobe_disabled(ap) && !kprobe_disabled(p)) {
+ 		ap->flags &= ~KPROBE_FLAG_DISABLED;
+@@ -1548,9 +1551,12 @@ int register_kprobe(struct kprobe *p)
+ 		goto out;
+ 	}
+ 
+-	mutex_lock(&text_mutex);	/* Avoiding text modification */
++	cpus_read_lock();
++	/* Prevent text modification */
++	mutex_lock(&text_mutex);
+ 	ret = prepare_kprobe(p);
+ 	mutex_unlock(&text_mutex);
++	cpus_read_unlock();
+ 	if (ret)
+ 		goto out;
+ 
+@@ -1563,7 +1569,6 @@ int register_kprobe(struct kprobe *p)
+ 
+ 	/* Try to optimize kprobe */
+ 	try_to_optimize_kprobe(p);
+-
+ out:
+ 	mutex_unlock(&kprobe_mutex);
+ 
 diff --git a/kernel/ksysfs.c b/kernel/ksysfs.c
 index 0999679d6f26..de55de2abc39 100644
 --- a/kernel/ksysfs.c
@@ -15255,7 +17141,7 @@ index 0999679d6f26..de55de2abc39 100644
  };
  
 diff --git a/kernel/locking/Makefile b/kernel/locking/Makefile
-index 760158d9d98d..ab8ec1328a33 100644
+index 760158d9d98d..8b269637d5d4 100644
 --- a/kernel/locking/Makefile
 +++ b/kernel/locking/Makefile
 @@ -2,7 +2,7 @@
@@ -15287,7 +17173,7 @@ index 760158d9d98d..ab8ec1328a33 100644
  obj-$(CONFIG_RWSEM_GENERIC_SPINLOCK) += rwsem-spinlock.o
  obj-$(CONFIG_RWSEM_XCHGADD_ALGORITHM) += rwsem-xadd.o
 +endif
-+obj-$(CONFIG_PREEMPT_RT_FULL) += rt.o rwsem-rt.o
++obj-$(CONFIG_PREEMPT_RT_FULL) += rt.o rwsem-rt.o rwlock-rt.o
  obj-$(CONFIG_QUEUED_RWLOCKS) += qrwlock.o
  obj-$(CONFIG_LOCK_TORTURE_TEST) += locktorture.o
  obj-$(CONFIG_WW_MUTEX_SELFTEST) += test-ww_mutex.o
@@ -15410,10 +17296,10 @@ index f24582d4dad3..98107f2689ab 100644
  #include <linux/smp.h>
 diff --git a/kernel/locking/rt.c b/kernel/locking/rt.c
 new file mode 100644
-index 000000000000..2f3881595a34
+index 000000000000..ee11269d708a
 --- /dev/null
 +++ b/kernel/locking/rt.c
-@@ -0,0 +1,354 @@
+@@ -0,0 +1,223 @@
 +/*
 + * kernel/rt.c
 + *
@@ -15614,137 +17500,6 @@ index 000000000000..2f3881595a34
 +}
 +EXPORT_SYMBOL(_mutex_unlock);
 +
-+/*
-+ * rwlock_t functions
-+ */
-+int __lockfunc rt_write_trylock(rwlock_t *rwlock)
-+{
-+	int ret;
-+
-+	migrate_disable();
-+	ret = rt_mutex_trylock(&rwlock->lock);
-+	if (ret)
-+		rwlock_acquire(&rwlock->dep_map, 0, 1, _RET_IP_);
-+	else
-+		migrate_enable();
-+
-+	return ret;
-+}
-+EXPORT_SYMBOL(rt_write_trylock);
-+
-+int __lockfunc rt_write_trylock_irqsave(rwlock_t *rwlock, unsigned long *flags)
-+{
-+	int ret;
-+
-+	*flags = 0;
-+	ret = rt_write_trylock(rwlock);
-+	return ret;
-+}
-+EXPORT_SYMBOL(rt_write_trylock_irqsave);
-+
-+int __lockfunc rt_read_trylock(rwlock_t *rwlock)
-+{
-+	struct rt_mutex *lock = &rwlock->lock;
-+	int ret = 1;
-+
-+	/*
-+	 * recursive read locks succeed when current owns the lock,
-+	 * but not when read_depth == 0 which means that the lock is
-+	 * write locked.
-+	 */
-+	if (rt_mutex_owner(lock) != current) {
-+		migrate_disable();
-+		ret = rt_mutex_trylock(lock);
-+		if (ret)
-+			rwlock_acquire(&rwlock->dep_map, 0, 1, _RET_IP_);
-+		else
-+			migrate_enable();
-+
-+	} else if (!rwlock->read_depth) {
-+		ret = 0;
-+	}
-+
-+	if (ret)
-+		rwlock->read_depth++;
-+
-+	return ret;
-+}
-+EXPORT_SYMBOL(rt_read_trylock);
-+
-+void __lockfunc rt_write_lock(rwlock_t *rwlock)
-+{
-+	rwlock_acquire(&rwlock->dep_map, 0, 0, _RET_IP_);
-+	__rt_spin_lock(&rwlock->lock);
-+}
-+EXPORT_SYMBOL(rt_write_lock);
-+
-+void __lockfunc rt_read_lock(rwlock_t *rwlock)
-+{
-+	struct rt_mutex *lock = &rwlock->lock;
-+
-+
-+	/*
-+	 * recursive read locks succeed when current owns the lock
-+	 */
-+	if (rt_mutex_owner(lock) != current) {
-+		rwlock_acquire(&rwlock->dep_map, 0, 0, _RET_IP_);
-+		__rt_spin_lock(lock);
-+	}
-+	rwlock->read_depth++;
-+}
-+
-+EXPORT_SYMBOL(rt_read_lock);
-+
-+void __lockfunc rt_write_unlock(rwlock_t *rwlock)
-+{
-+	/* NOTE: we always pass in '1' for nested, for simplicity */
-+	rwlock_release(&rwlock->dep_map, 1, _RET_IP_);
-+	__rt_spin_unlock(&rwlock->lock);
-+	migrate_enable();
-+}
-+EXPORT_SYMBOL(rt_write_unlock);
-+
-+void __lockfunc rt_read_unlock(rwlock_t *rwlock)
-+{
-+	/* Release the lock only when read_depth is down to 0 */
-+	if (--rwlock->read_depth == 0) {
-+		rwlock_release(&rwlock->dep_map, 1, _RET_IP_);
-+		__rt_spin_unlock(&rwlock->lock);
-+		migrate_enable();
-+	}
-+}
-+EXPORT_SYMBOL(rt_read_unlock);
-+
-+unsigned long __lockfunc rt_write_lock_irqsave(rwlock_t *rwlock)
-+{
-+	rt_write_lock(rwlock);
-+
-+	return 0;
-+}
-+EXPORT_SYMBOL(rt_write_lock_irqsave);
-+
-+unsigned long __lockfunc rt_read_lock_irqsave(rwlock_t *rwlock)
-+{
-+	rt_read_lock(rwlock);
-+
-+	return 0;
-+}
-+EXPORT_SYMBOL(rt_read_lock_irqsave);
-+
-+void __rt_rwlock_init(rwlock_t *rwlock, char *name, struct lock_class_key *key)
-+{
-+#ifdef CONFIG_DEBUG_LOCK_ALLOC
-+	/*
-+	 * Make sure we are not reinitializing a held lock:
-+	 */
-+	debug_check_no_locks_freed((void *)rwlock, sizeof(*rwlock));
-+	lockdep_init_map(&rwlock->dep_map, name, key, 0);
-+#endif
-+	rwlock->lock.save_state = 1;
-+	rwlock->read_depth = 0;
-+}
-+EXPORT_SYMBOL(__rt_rwlock_init);
-+
 +/**
 + * atomic_dec_and_mutex_lock - return holding mutex if we dec to 0
 + * @cnt: the atomic which we are to dec
@@ -15800,7 +17555,7 @@ index d0519c3432b6..b585af9a1b50 100644
  extern void debug_rt_mutex_free_waiter(struct rt_mutex_waiter *waiter);
  extern void debug_rt_mutex_init(struct rt_mutex *lock, const char *name);
 diff --git a/kernel/locking/rtmutex.c b/kernel/locking/rtmutex.c
-index 6edc32ecd9c5..e6f50652e14c 100644
+index 6edc32ecd9c5..f03876322d4a 100644
 --- a/kernel/locking/rtmutex.c
 +++ b/kernel/locking/rtmutex.c
 @@ -7,6 +7,11 @@
@@ -16140,7 +17895,7 @@ index 6edc32ecd9c5..e6f50652e14c 100644
  			/*
  			 * The current top waiter stays enqueued. We
  			 * don't have to change anything in the lock
-@@ -938,11 +972,384 @@ static int try_to_take_rt_mutex(struct rt_mutex *lock, struct task_struct *task,
+@@ -938,11 +972,346 @@ static int try_to_take_rt_mutex(struct rt_mutex *lock, struct task_struct *task,
  	 */
  	rt_mutex_set_owner(lock, task);
  
@@ -16154,19 +17909,14 @@ index 6edc32ecd9c5..e6f50652e14c 100644
 + * preemptible spin_lock functions:
 + */
 +static inline void rt_spin_lock_fastlock(struct rt_mutex *lock,
-+					 void  (*slowfn)(struct rt_mutex *lock,
-+							 bool mg_off),
-+					 bool do_mig_dis)
++					 void  (*slowfn)(struct rt_mutex *lock))
 +{
 +	might_sleep_no_state_check();
-+
-+	if (do_mig_dis)
-+		migrate_disable();
 +
 +	if (likely(rt_mutex_cmpxchg_acquire(lock, NULL, current)))
 +		return;
 +	else
-+		slowfn(lock, do_mig_dis);
++		slowfn(lock);
 +}
 +
 +static inline void rt_spin_lock_fastunlock(struct rt_mutex *lock,
@@ -16224,22 +17974,16 @@ index 6edc32ecd9c5..e6f50652e14c 100644
 + * We store the current state under p->pi_lock in p->saved_state and
 + * the try_to_wake_up() code handles this accordingly.
 + */
-+static void  noinline __sched rt_spin_lock_slowlock(struct rt_mutex *lock,
-+						    bool mg_off)
++void __sched rt_spin_lock_slowlock_locked(struct rt_mutex *lock,
++					  struct rt_mutex_waiter *waiter,
++					  unsigned long flags)
 +{
 +	struct task_struct *lock_owner, *self = current;
-+	struct rt_mutex_waiter waiter, *top_waiter;
-+	unsigned long flags;
++	struct rt_mutex_waiter *top_waiter;
 +	int ret;
 +
-+	rt_mutex_init_waiter(&waiter, true);
-+
-+	raw_spin_lock_irqsave(&lock->wait_lock, flags);
-+
-+	if (__try_to_take_rt_mutex(lock, self, NULL, STEAL_LATERAL)) {
-+		raw_spin_unlock_irqrestore(&lock->wait_lock, flags);
++	if (__try_to_take_rt_mutex(lock, self, NULL, STEAL_LATERAL))
 +		return;
-+	}
 +
 +	BUG_ON(rt_mutex_owner(lock) == self);
 +
@@ -16254,12 +17998,12 @@ index 6edc32ecd9c5..e6f50652e14c 100644
 +	__set_current_state_no_track(TASK_UNINTERRUPTIBLE);
 +	raw_spin_unlock(&self->pi_lock);
 +
-+	ret = task_blocks_on_rt_mutex(lock, &waiter, self, RT_MUTEX_MIN_CHAINWALK);
++	ret = task_blocks_on_rt_mutex(lock, waiter, self, RT_MUTEX_MIN_CHAINWALK);
 +	BUG_ON(ret);
 +
 +	for (;;) {
 +		/* Try to acquire the lock again. */
-+		if (__try_to_take_rt_mutex(lock, self, &waiter, STEAL_LATERAL))
++		if (__try_to_take_rt_mutex(lock, self, waiter, STEAL_LATERAL))
 +			break;
 +
 +		top_waiter = rt_mutex_top_waiter(lock);
@@ -16267,15 +18011,10 @@ index 6edc32ecd9c5..e6f50652e14c 100644
 +
 +		raw_spin_unlock_irqrestore(&lock->wait_lock, flags);
 +
-+		debug_rt_mutex_print_deadlock(&waiter);
++		debug_rt_mutex_print_deadlock(waiter);
 +
-+		if (top_waiter != &waiter || adaptive_wait(lock, lock_owner)) {
-+			if (mg_off)
-+				migrate_enable();
++		if (top_waiter != waiter || adaptive_wait(lock, lock_owner))
 +			schedule();
-+			if (mg_off)
-+				migrate_disable();
-+		}
 +
 +		raw_spin_lock_irqsave(&lock->wait_lock, flags);
 +
@@ -16302,11 +18041,20 @@ index 6edc32ecd9c5..e6f50652e14c 100644
 +	 */
 +	fixup_rt_mutex_waiters(lock);
 +
-+	BUG_ON(rt_mutex_has_waiters(lock) && &waiter == rt_mutex_top_waiter(lock));
-+	BUG_ON(!RB_EMPTY_NODE(&waiter.tree_entry));
++	BUG_ON(rt_mutex_has_waiters(lock) && waiter == rt_mutex_top_waiter(lock));
++	BUG_ON(!RB_EMPTY_NODE(&waiter->tree_entry));
++}
 +
++static void noinline __sched rt_spin_lock_slowlock(struct rt_mutex *lock)
++{
++	struct rt_mutex_waiter waiter;
++	unsigned long flags;
++
++	rt_mutex_init_waiter(&waiter, true);
++
++	raw_spin_lock_irqsave(&lock->wait_lock, flags);
++	rt_spin_lock_slowlock_locked(lock, &waiter, flags);
 +	raw_spin_unlock_irqrestore(&lock->wait_lock, flags);
-+
 +	debug_rt_mutex_free_waiter(&waiter);
 +}
 +
@@ -16316,7 +18064,7 @@ index 6edc32ecd9c5..e6f50652e14c 100644
 +/*
 + * Slow path to release a rt_mutex spin_lock style
 + */
-+static void  noinline __sched rt_spin_lock_slowunlock(struct rt_mutex *lock)
++void __sched rt_spin_lock_slowunlock(struct rt_mutex *lock)
 +{
 +	unsigned long flags;
 +	DEFINE_WAKE_Q(wake_q);
@@ -16331,48 +18079,28 @@ index 6edc32ecd9c5..e6f50652e14c 100644
 +		rt_mutex_postunlock(&wake_q, &wake_sleeper_q);
 +}
 +
-+void __lockfunc rt_spin_lock__no_mg(spinlock_t *lock)
-+{
-+	rt_spin_lock_fastlock(&lock->lock, rt_spin_lock_slowlock, false);
-+	spin_acquire(&lock->dep_map, 0, 0, _RET_IP_);
-+}
-+EXPORT_SYMBOL(rt_spin_lock__no_mg);
-+
 +void __lockfunc rt_spin_lock(spinlock_t *lock)
 +{
-+	rt_spin_lock_fastlock(&lock->lock, rt_spin_lock_slowlock, true);
++	migrate_disable();
++	rt_spin_lock_fastlock(&lock->lock, rt_spin_lock_slowlock);
 +	spin_acquire(&lock->dep_map, 0, 0, _RET_IP_);
 +}
 +EXPORT_SYMBOL(rt_spin_lock);
 +
 +void __lockfunc __rt_spin_lock(struct rt_mutex *lock)
 +{
-+	rt_spin_lock_fastlock(lock, rt_spin_lock_slowlock, true);
++	rt_spin_lock_fastlock(lock, rt_spin_lock_slowlock);
 +}
-+EXPORT_SYMBOL(__rt_spin_lock);
-+
-+void __lockfunc __rt_spin_lock__no_mg(struct rt_mutex *lock)
-+{
-+	rt_spin_lock_fastlock(lock, rt_spin_lock_slowlock, false);
-+}
-+EXPORT_SYMBOL(__rt_spin_lock__no_mg);
 +
 +#ifdef CONFIG_DEBUG_LOCK_ALLOC
 +void __lockfunc rt_spin_lock_nested(spinlock_t *lock, int subclass)
 +{
++	migrate_disable();
 +	spin_acquire(&lock->dep_map, subclass, 0, _RET_IP_);
-+	rt_spin_lock_fastlock(&lock->lock, rt_spin_lock_slowlock, true);
++	rt_spin_lock_fastlock(&lock->lock, rt_spin_lock_slowlock);
 +}
 +EXPORT_SYMBOL(rt_spin_lock_nested);
 +#endif
-+
-+void __lockfunc rt_spin_unlock__no_mg(spinlock_t *lock)
-+{
-+	/* NOTE: we always pass in '1' for nested, for simplicity */
-+	spin_release(&lock->dep_map, 1, _RET_IP_);
-+	rt_spin_lock_fastunlock(&lock->lock, rt_spin_lock_slowunlock);
-+}
-+EXPORT_SYMBOL(rt_spin_unlock__no_mg);
 +
 +void __lockfunc rt_spin_unlock(spinlock_t *lock)
 +{
@@ -16400,17 +18128,6 @@ index 6edc32ecd9c5..e6f50652e14c 100644
 +	spin_unlock(lock);
 +}
 +EXPORT_SYMBOL(rt_spin_unlock_wait);
-+
-+int __lockfunc rt_spin_trylock__no_mg(spinlock_t *lock)
-+{
-+	int ret;
-+
-+	ret = rt_mutex_trylock(&lock->lock);
-+	if (ret)
-+		spin_acquire(&lock->dep_map, 0, 1, _RET_IP_);
-+	return ret;
-+}
-+EXPORT_SYMBOL(rt_spin_trylock__no_mg);
 +
 +int __lockfunc rt_spin_trylock(spinlock_t *lock)
 +{
@@ -16527,7 +18244,7 @@ index 6edc32ecd9c5..e6f50652e14c 100644
  /*
   * Task blocks on lock.
   *
-@@ -960,6 +1367,8 @@ static int task_blocks_on_rt_mutex(struct rt_mutex *lock,
+@@ -960,6 +1329,8 @@ static int task_blocks_on_rt_mutex(struct rt_mutex *lock,
  	struct rt_mutex *next_lock;
  	int chain_walk = 0, res;
  
@@ -16536,7 +18253,7 @@ index 6edc32ecd9c5..e6f50652e14c 100644
  	/*
  	 * Early deadlock detection. We really don't want the task to
  	 * enqueue on itself just to untangle the mess later. It's not
-@@ -973,10 +1382,28 @@ static int task_blocks_on_rt_mutex(struct rt_mutex *lock,
+@@ -973,10 +1344,28 @@ static int task_blocks_on_rt_mutex(struct rt_mutex *lock,
  		return -EDEADLK;
  
  	raw_spin_lock(&task->pi_lock);
@@ -16566,7 +18283,7 @@ index 6edc32ecd9c5..e6f50652e14c 100644
  
  	/* Get the top priority waiter on the lock */
  	if (rt_mutex_has_waiters(lock))
-@@ -995,8 +1422,8 @@ static int task_blocks_on_rt_mutex(struct rt_mutex *lock,
+@@ -995,8 +1384,8 @@ static int task_blocks_on_rt_mutex(struct rt_mutex *lock,
  		rt_mutex_dequeue_pi(owner, top_waiter);
  		rt_mutex_enqueue_pi(owner, waiter);
  
@@ -16577,7 +18294,7 @@ index 6edc32ecd9c5..e6f50652e14c 100644
  			chain_walk = 1;
  	} else if (rt_mutex_cond_detect_deadlock(waiter, chwalk)) {
  		chain_walk = 1;
-@@ -1038,6 +1465,7 @@ static int task_blocks_on_rt_mutex(struct rt_mutex *lock,
+@@ -1038,6 +1427,7 @@ static int task_blocks_on_rt_mutex(struct rt_mutex *lock,
   * Called with lock->wait_lock held and interrupts disabled.
   */
  static void mark_wakeup_next_waiter(struct wake_q_head *wake_q,
@@ -16585,7 +18302,7 @@ index 6edc32ecd9c5..e6f50652e14c 100644
  				    struct rt_mutex *lock)
  {
  	struct rt_mutex_waiter *waiter;
-@@ -1047,12 +1475,14 @@ static void mark_wakeup_next_waiter(struct wake_q_head *wake_q,
+@@ -1047,12 +1437,14 @@ static void mark_wakeup_next_waiter(struct wake_q_head *wake_q,
  	waiter = rt_mutex_top_waiter(lock);
  
  	/*
@@ -16604,7 +18321,7 @@ index 6edc32ecd9c5..e6f50652e14c 100644
  
  	/*
  	 * As we are waking up the top waiter, and the waiter stays
-@@ -1064,9 +1494,22 @@ static void mark_wakeup_next_waiter(struct wake_q_head *wake_q,
+@@ -1064,9 +1456,22 @@ static void mark_wakeup_next_waiter(struct wake_q_head *wake_q,
  	 */
  	lock->owner = (void *) RT_MUTEX_HAS_WAITERS;
  
@@ -16629,7 +18346,7 @@ index 6edc32ecd9c5..e6f50652e14c 100644
  }
  
  /*
-@@ -1080,7 +1523,9 @@ static void remove_waiter(struct rt_mutex *lock,
+@@ -1080,7 +1485,9 @@ static void remove_waiter(struct rt_mutex *lock,
  {
  	bool is_top_waiter = (waiter == rt_mutex_top_waiter(lock));
  	struct task_struct *owner = rt_mutex_owner(lock);
@@ -16640,7 +18357,7 @@ index 6edc32ecd9c5..e6f50652e14c 100644
  
  	raw_spin_lock(&current->pi_lock);
  	rt_mutex_dequeue(lock, waiter);
-@@ -1101,10 +1546,11 @@ static void remove_waiter(struct rt_mutex *lock,
+@@ -1101,10 +1508,11 @@ static void remove_waiter(struct rt_mutex *lock,
  	if (rt_mutex_has_waiters(lock))
  		rt_mutex_enqueue_pi(owner, rt_mutex_top_waiter(lock));
  
@@ -16654,7 +18371,7 @@ index 6edc32ecd9c5..e6f50652e14c 100644
  
  	raw_spin_unlock(&owner->pi_lock);
  
-@@ -1140,21 +1586,30 @@ void rt_mutex_adjust_pi(struct task_struct *task)
+@@ -1140,21 +1548,30 @@ void rt_mutex_adjust_pi(struct task_struct *task)
  	raw_spin_lock_irqsave(&task->pi_lock, flags);
  
  	waiter = task->pi_blocked_on;
@@ -16688,7 +18405,7 @@ index 6edc32ecd9c5..e6f50652e14c 100644
  /**
   * __rt_mutex_slowlock() - Perform the wait-wake-try-to-take loop
   * @lock:		 the rt_mutex to take
-@@ -1168,7 +1623,8 @@ void rt_mutex_adjust_pi(struct task_struct *task)
+@@ -1168,7 +1585,8 @@ void rt_mutex_adjust_pi(struct task_struct *task)
  static int __sched
  __rt_mutex_slowlock(struct rt_mutex *lock, int state,
  		    struct hrtimer_sleeper *timeout,
@@ -16698,7 +18415,7 @@ index 6edc32ecd9c5..e6f50652e14c 100644
  {
  	int ret = 0;
  
-@@ -1177,16 +1633,17 @@ __rt_mutex_slowlock(struct rt_mutex *lock, int state,
+@@ -1177,16 +1595,17 @@ __rt_mutex_slowlock(struct rt_mutex *lock, int state,
  		if (try_to_take_rt_mutex(lock, current, waiter))
  			break;
  
@@ -16726,7 +18443,7 @@ index 6edc32ecd9c5..e6f50652e14c 100644
  			if (ret)
  				break;
  		}
-@@ -1225,21 +1682,159 @@ static void rt_mutex_handle_deadlock(int res, int detect_deadlock,
+@@ -1225,21 +1644,159 @@ static void rt_mutex_handle_deadlock(int res, int detect_deadlock,
  	}
  }
  
@@ -16890,7 +18607,7 @@ index 6edc32ecd9c5..e6f50652e14c 100644
  
  	/*
  	 * Technically we could use raw_spin_[un]lock_irq() here, but this can
-@@ -1251,36 +1846,8 @@ rt_mutex_slowlock(struct rt_mutex *lock, int state,
+@@ -1251,36 +1808,8 @@ rt_mutex_slowlock(struct rt_mutex *lock, int state,
  	 */
  	raw_spin_lock_irqsave(&lock->wait_lock, flags);
  
@@ -16929,7 +18646,7 @@ index 6edc32ecd9c5..e6f50652e14c 100644
  
  	raw_spin_unlock_irqrestore(&lock->wait_lock, flags);
  
-@@ -1330,10 +1897,12 @@ static inline int rt_mutex_slowtrylock(struct rt_mutex *lock)
+@@ -1330,10 +1859,12 @@ static inline int rt_mutex_slowtrylock(struct rt_mutex *lock)
  
  /*
   * Slow path to release a rt-mutex.
@@ -16944,7 +18661,7 @@ index 6edc32ecd9c5..e6f50652e14c 100644
  {
  	unsigned long flags;
  
-@@ -1342,8 +1911,6 @@ static bool __sched rt_mutex_slowunlock(struct rt_mutex *lock,
+@@ -1342,8 +1873,6 @@ static bool __sched rt_mutex_slowunlock(struct rt_mutex *lock,
  
  	debug_rt_mutex_unlock(lock);
  
@@ -16953,7 +18670,7 @@ index 6edc32ecd9c5..e6f50652e14c 100644
  	/*
  	 * We must be careful here if the fast path is enabled. If we
  	 * have no waiters queued we cannot set owner to NULL here
-@@ -1389,12 +1956,10 @@ static bool __sched rt_mutex_slowunlock(struct rt_mutex *lock,
+@@ -1389,12 +1918,10 @@ static bool __sched rt_mutex_slowunlock(struct rt_mutex *lock,
  	 *
  	 * Queue the next waiter for wakeup once we release the wait_lock.
  	 */
@@ -16968,7 +18685,7 @@ index 6edc32ecd9c5..e6f50652e14c 100644
  }
  
  /*
-@@ -1405,63 +1970,85 @@ static bool __sched rt_mutex_slowunlock(struct rt_mutex *lock,
+@@ -1405,63 +1932,85 @@ static bool __sched rt_mutex_slowunlock(struct rt_mutex *lock,
   */
  static inline int
  rt_mutex_fastlock(struct rt_mutex *lock, int state,
@@ -17077,7 +18794,7 @@ index 6edc32ecd9c5..e6f50652e14c 100644
  }
  
  /**
-@@ -1471,15 +2058,13 @@ rt_mutex_fastunlock(struct rt_mutex *lock,
+@@ -1471,15 +2020,13 @@ rt_mutex_fastunlock(struct rt_mutex *lock,
   */
  void __sched rt_mutex_lock(struct rt_mutex *lock)
  {
@@ -17095,7 +18812,7 @@ index 6edc32ecd9c5..e6f50652e14c 100644
   * @lock:		the rt_mutex to be locked
   *
   * Returns:
-@@ -1488,23 +2073,32 @@ EXPORT_SYMBOL_GPL(rt_mutex_lock);
+@@ -1488,23 +2035,32 @@ EXPORT_SYMBOL_GPL(rt_mutex_lock);
   */
  int __sched rt_mutex_lock_interruptible(struct rt_mutex *lock)
  {
@@ -17139,7 +18856,7 @@ index 6edc32ecd9c5..e6f50652e14c 100644
  }
  
  /**
-@@ -1527,6 +2121,7 @@ rt_mutex_timed_lock(struct rt_mutex *lock, struct hrtimer_sleeper *timeout)
+@@ -1527,6 +2083,7 @@ rt_mutex_timed_lock(struct rt_mutex *lock, struct hrtimer_sleeper *timeout)
  
  	return rt_mutex_timed_fastlock(lock, TASK_INTERRUPTIBLE, timeout,
  				       RT_MUTEX_MIN_CHAINWALK,
@@ -17147,7 +18864,7 @@ index 6edc32ecd9c5..e6f50652e14c 100644
  				       rt_mutex_slowlock);
  }
  EXPORT_SYMBOL_GPL(rt_mutex_timed_lock);
-@@ -1544,7 +2139,11 @@ EXPORT_SYMBOL_GPL(rt_mutex_timed_lock);
+@@ -1544,7 +2101,11 @@ EXPORT_SYMBOL_GPL(rt_mutex_timed_lock);
   */
  int __sched rt_mutex_trylock(struct rt_mutex *lock)
  {
@@ -17159,7 +18876,7 @@ index 6edc32ecd9c5..e6f50652e14c 100644
  		return 0;
  
  	return rt_mutex_fasttrylock(lock, rt_mutex_slowtrylock);
-@@ -1562,21 +2161,53 @@ void __sched rt_mutex_unlock(struct rt_mutex *lock)
+@@ -1562,21 +2123,53 @@ void __sched rt_mutex_unlock(struct rt_mutex *lock)
  }
  EXPORT_SYMBOL_GPL(rt_mutex_unlock);
  
@@ -17226,7 +18943,7 @@ index 6edc32ecd9c5..e6f50652e14c 100644
  }
  
  /**
-@@ -1609,13 +2240,12 @@ EXPORT_SYMBOL_GPL(rt_mutex_destroy);
+@@ -1609,13 +2202,12 @@ EXPORT_SYMBOL_GPL(rt_mutex_destroy);
  void __rt_mutex_init(struct rt_mutex *lock, const char *name)
  {
  	lock->owner = NULL;
@@ -17241,7 +18958,7 @@ index 6edc32ecd9c5..e6f50652e14c 100644
  
  /**
   * rt_mutex_init_proxy_locked - initialize and lock a rt_mutex on behalf of a
-@@ -1634,10 +2264,9 @@ EXPORT_SYMBOL_GPL(__rt_mutex_init);
+@@ -1634,10 +2226,9 @@ EXPORT_SYMBOL_GPL(__rt_mutex_init);
  void rt_mutex_init_proxy_locked(struct rt_mutex *lock,
  				struct task_struct *proxy_owner)
  {
@@ -17253,7 +18970,7 @@ index 6edc32ecd9c5..e6f50652e14c 100644
  }
  
  /**
-@@ -1657,7 +2286,66 @@ void rt_mutex_proxy_unlock(struct rt_mutex *lock,
+@@ -1657,7 +2248,66 @@ void rt_mutex_proxy_unlock(struct rt_mutex *lock,
  {
  	debug_rt_mutex_proxy_unlock(lock);
  	rt_mutex_set_owner(lock, NULL);
@@ -17321,7 +19038,7 @@ index 6edc32ecd9c5..e6f50652e14c 100644
  }
  
  /**
-@@ -1680,33 +2368,9 @@ int rt_mutex_start_proxy_lock(struct rt_mutex *lock,
+@@ -1680,33 +2330,9 @@ int rt_mutex_start_proxy_lock(struct rt_mutex *lock,
  	int ret;
  
  	raw_spin_lock_irq(&lock->wait_lock);
@@ -17356,7 +19073,7 @@ index 6edc32ecd9c5..e6f50652e14c 100644
  	return ret;
  }
  
-@@ -1731,36 +2395,106 @@ struct task_struct *rt_mutex_next_owner(struct rt_mutex *lock)
+@@ -1731,36 +2357,106 @@ struct task_struct *rt_mutex_next_owner(struct rt_mutex *lock)
  }
  
  /**
@@ -17473,7 +19190,7 @@ index 6edc32ecd9c5..e6f50652e14c 100644
  	/*
  	 * try_to_take_rt_mutex() sets the waiter bit unconditionally. We might
  	 * have to fix that up.
-@@ -1769,5 +2503,101 @@ int rt_mutex_finish_proxy_lock(struct rt_mutex *lock,
+@@ -1769,5 +2465,101 @@ int rt_mutex_finish_proxy_lock(struct rt_mutex *lock,
  
  	raw_spin_unlock_irq(&lock->wait_lock);
  
@@ -17589,7 +19306,7 @@ index c4060584c407..6607802efa8b 100644
  #define debug_rt_mutex_free_waiter(w)			do { } while (0)
  #define debug_rt_mutex_lock(l)				do { } while (0)
 diff --git a/kernel/locking/rtmutex_common.h b/kernel/locking/rtmutex_common.h
-index 856dfff5c33a..42c772107662 100644
+index 856dfff5c33a..2d331eb7c8d9 100644
 --- a/kernel/locking/rtmutex_common.h
 +++ b/kernel/locking/rtmutex_common.h
 @@ -14,6 +14,7 @@
@@ -17615,7 +19332,7 @@ index 856dfff5c33a..42c772107662 100644
  };
  
  /*
-@@ -98,21 +101,44 @@ enum rtmutex_chainwalk {
+@@ -98,21 +101,48 @@ enum rtmutex_chainwalk {
  /*
   * PI-futex support (proxy locking functions, etc.):
   */
@@ -17664,9 +19381,419 @@ index 856dfff5c33a..42c772107662 100644
 +				     enum rtmutex_chainwalk chwalk,
 +				     struct ww_acquire_ctx *ww_ctx,
 +				     struct rt_mutex_waiter *waiter);
++void __sched rt_spin_lock_slowlock_locked(struct rt_mutex *lock,
++					  struct rt_mutex_waiter *waiter,
++					  unsigned long flags);
++void __sched rt_spin_lock_slowunlock(struct rt_mutex *lock);
  
  #ifdef CONFIG_DEBUG_RT_MUTEXES
  # include "rtmutex-debug.h"
+diff --git a/kernel/locking/rwlock-rt.c b/kernel/locking/rwlock-rt.c
+new file mode 100644
+index 000000000000..38d76ba5c40b
+--- /dev/null
++++ b/kernel/locking/rwlock-rt.c
+@@ -0,0 +1,400 @@
++/*
++ */
++#include <linux/sched/debug.h>
++#include <linux/export.h>
++
++#include "rtmutex_common.h"
++#include <linux/rwlock_types_rt.h>
++
++/*
++ * RT-specific reader/writer locks
++ *
++ * write_lock()
++ *  1) Lock lock->rtmutex
++ *  2) Remove the reader BIAS to force readers into the slow path
++ *  3) Wait until all readers have left the critical region
++ *  4) Mark it write locked
++ *
++ * write_unlock()
++ *  1) Remove the write locked marker
++ *  2) Set the reader BIAS so readers can use the fast path again
++ *  3) Unlock lock->rtmutex to release blocked readers
++ *
++ * read_lock()
++ *  1) Try fast path acquisition (reader BIAS is set)
++ *  2) Take lock->rtmutex.wait_lock which protects the writelocked flag
++ *  3) If !writelocked, acquire it for read
++ *  4) If writelocked, block on lock->rtmutex
++ *  5) unlock lock->rtmutex, goto 1)
++ *
++ * read_unlock()
++ *  1) Try fast path release (reader count != 1)
++ *  2) Wake the writer waiting in write_lock()#3
++ *
++ * read_lock()#3 has the consequence, that rw locks on RT are not writer
++ * fair, but writers, which should be avoided in RT tasks (think tasklist
++ * lock), are subject to the rtmutex priority/DL inheritance mechanism.
++ *
++ * It's possible to make the rw locks writer fair by keeping a list of
++ * active readers. A blocked writer would force all newly incoming readers
++ * to block on the rtmutex, but the rtmutex would have to be proxy locked
++ * for one reader after the other. We can't use multi-reader inheritance
++ * because there is no way to support that with
++ * SCHED_DEADLINE. Implementing the one by one reader boosting/handover
++ * mechanism is a major surgery for a very dubious value.
++ *
++ * The risk of writer starvation is there, but the pathological use cases
++ * which trigger it are not necessarily the typical RT workloads.
++ */
++
++void __rwlock_biased_rt_init(struct rt_rw_lock *lock, const char *name,
++			     struct lock_class_key *key)
++{
++#ifdef CONFIG_DEBUG_LOCK_ALLOC
++	/*
++	 * Make sure we are not reinitializing a held semaphore:
++	 */
++	debug_check_no_locks_freed((void *)lock, sizeof(*lock));
++	lockdep_init_map(&lock->dep_map, name, key, 0);
++#endif
++	atomic_set(&lock->readers, READER_BIAS);
++	rt_mutex_init(&lock->rtmutex);
++	lock->rtmutex.save_state = 1;
++}
++
++int __read_rt_trylock(struct rt_rw_lock *lock)
++{
++	int r, old;
++
++	/*
++	 * Increment reader count, if lock->readers < 0, i.e. READER_BIAS is
++	 * set.
++	 */
++	for (r = atomic_read(&lock->readers); r < 0;) {
++		old = atomic_cmpxchg(&lock->readers, r, r + 1);
++		if (likely(old == r))
++			return 1;
++		r = old;
++	}
++	return 0;
++}
++
++void __sched __read_rt_lock(struct rt_rw_lock *lock)
++{
++	struct rt_mutex *m = &lock->rtmutex;
++	struct rt_mutex_waiter waiter;
++	unsigned long flags;
++
++	if (__read_rt_trylock(lock))
++		return;
++
++	raw_spin_lock_irqsave(&m->wait_lock, flags);
++	/*
++	 * Allow readers as long as the writer has not completely
++	 * acquired the semaphore for write.
++	 */
++	if (atomic_read(&lock->readers) != WRITER_BIAS) {
++		atomic_inc(&lock->readers);
++		raw_spin_unlock_irqrestore(&m->wait_lock, flags);
++		return;
++	}
++
++	/*
++	 * Call into the slow lock path with the rtmutex->wait_lock
++	 * held, so this can't result in the following race:
++	 *
++	 * Reader1		Reader2		Writer
++	 *			read_lock()
++	 *					write_lock()
++	 *					rtmutex_lock(m)
++	 *					swait()
++	 * read_lock()
++	 * unlock(m->wait_lock)
++	 *			read_unlock()
++	 *			swake()
++	 *					lock(m->wait_lock)
++	 *					lock->writelocked=true
++	 *					unlock(m->wait_lock)
++	 *
++	 *					write_unlock()
++	 *					lock->writelocked=false
++	 *					rtmutex_unlock(m)
++	 *			read_lock()
++	 *					write_lock()
++	 *					rtmutex_lock(m)
++	 *					swait()
++	 * rtmutex_lock(m)
++	 *
++	 * That would put Reader1 behind the writer waiting on
++	 * Reader2 to call read_unlock() which might be unbound.
++	 */
++	rt_mutex_init_waiter(&waiter, false);
++	rt_spin_lock_slowlock_locked(m, &waiter, flags);
++	/*
++	 * The slowlock() above is guaranteed to return with the rtmutex is
++	 * now held, so there can't be a writer active. Increment the reader
++	 * count and immediately drop the rtmutex again.
++	 */
++	atomic_inc(&lock->readers);
++	raw_spin_unlock_irqrestore(&m->wait_lock, flags);
++	rt_spin_lock_slowunlock(m);
++
++	debug_rt_mutex_free_waiter(&waiter);
++}
++
++void __read_rt_unlock(struct rt_rw_lock *lock)
++{
++	struct rt_mutex *m = &lock->rtmutex;
++	struct task_struct *tsk;
++
++	/*
++	 * sem->readers can only hit 0 when a writer is waiting for the
++	 * active readers to leave the critical region.
++	 */
++	if (!atomic_dec_and_test(&lock->readers))
++		return;
++
++	raw_spin_lock_irq(&m->wait_lock);
++	/*
++	 * Wake the writer, i.e. the rtmutex owner. It might release the
++	 * rtmutex concurrently in the fast path, but to clean up the rw
++	 * lock it needs to acquire m->wait_lock. The worst case which can
++	 * happen is a spurious wakeup.
++	 */
++	tsk = rt_mutex_owner(m);
++	if (tsk)
++		wake_up_process(tsk);
++
++	raw_spin_unlock_irq(&m->wait_lock);
++}
++
++static void __write_unlock_common(struct rt_rw_lock *lock, int bias,
++				  unsigned long flags)
++{
++	struct rt_mutex *m = &lock->rtmutex;
++
++	atomic_add(READER_BIAS - bias, &lock->readers);
++	raw_spin_unlock_irqrestore(&m->wait_lock, flags);
++	rt_spin_lock_slowunlock(m);
++}
++
++void __sched __write_rt_lock(struct rt_rw_lock *lock)
++{
++	struct rt_mutex *m = &lock->rtmutex;
++	struct task_struct *self = current;
++	unsigned long flags;
++
++	/* Take the rtmutex as a first step */
++	__rt_spin_lock(m);
++
++	/* Force readers into slow path */
++	atomic_sub(READER_BIAS, &lock->readers);
++
++	for (;;) {
++		raw_spin_lock_irqsave(&m->wait_lock, flags);
++
++		raw_spin_lock(&self->pi_lock);
++		self->saved_state = self->state;
++		__set_current_state_no_track(TASK_UNINTERRUPTIBLE);
++		raw_spin_unlock(&self->pi_lock);
++
++		/* Have all readers left the critical region? */
++		if (!atomic_read(&lock->readers)) {
++			atomic_set(&lock->readers, WRITER_BIAS);
++			raw_spin_lock(&self->pi_lock);
++			__set_current_state_no_track(self->saved_state);
++			self->saved_state = TASK_RUNNING;
++			raw_spin_unlock(&self->pi_lock);
++			raw_spin_unlock_irqrestore(&m->wait_lock, flags);
++			return;
++		}
++
++		raw_spin_unlock_irqrestore(&m->wait_lock, flags);
++
++		if (atomic_read(&lock->readers) != 0)
++			schedule();
++	}
++}
++
++int __write_rt_trylock(struct rt_rw_lock *lock)
++{
++	struct rt_mutex *m = &lock->rtmutex;
++	unsigned long flags;
++
++	if (!rt_mutex_trylock(m))
++		return 0;
++
++	atomic_sub(READER_BIAS, &lock->readers);
++
++	raw_spin_lock_irqsave(&m->wait_lock, flags);
++	if (!atomic_read(&lock->readers)) {
++		atomic_set(&lock->readers, WRITER_BIAS);
++		raw_spin_unlock_irqrestore(&m->wait_lock, flags);
++		return 1;
++	}
++	__write_unlock_common(lock, 0, flags);
++	return 0;
++}
++
++void __write_rt_unlock(struct rt_rw_lock *lock)
++{
++	struct rt_mutex *m = &lock->rtmutex;
++	unsigned long flags;
++
++	raw_spin_lock_irqsave(&m->wait_lock, flags);
++	__write_unlock_common(lock, WRITER_BIAS, flags);
++}
++
++#ifndef CONFIG_RWLOCK_RT_READER_BIASED
++/* Map the single reader implementation */
++static inline int do_read_rt_trylock(rwlock_t *rwlock)
++{
++	return rt_mutex_trylock(&rwlock->lock);
++}
++
++static inline int do_write_rt_trylock(rwlock_t *rwlock)
++{
++	return rt_mutex_trylock(&rwlock->lock);
++}
++
++static inline void do_read_rt_lock(rwlock_t *rwlock)
++{
++	__rt_spin_lock(&rwlock->lock);
++}
++
++static inline void do_write_rt_lock(rwlock_t *rwlock)
++{
++	__rt_spin_lock(&rwlock->lock);
++}
++
++static inline void do_read_rt_unlock(rwlock_t *rwlock)
++{
++	__rt_spin_unlock(&rwlock->lock);
++}
++
++static inline void do_write_rt_unlock(rwlock_t *rwlock)
++{
++	__rt_spin_unlock(&rwlock->lock);
++}
++
++static inline void do_rwlock_rt_init(rwlock_t *rwlock, const char *name,
++				     struct lock_class_key *key)
++{
++#ifdef CONFIG_DEBUG_LOCK_ALLOC
++	/*
++	 * Make sure we are not reinitializing a held lock:
++	 */
++	debug_check_no_locks_freed((void *)rwlock, sizeof(*rwlock));
++	lockdep_init_map(&rwlock->dep_map, name, key, 0);
++#endif
++	rt_mutex_init(&rwlock->lock);
++	rwlock->lock.save_state = 1;
++}
++
++#else
++/* Map the reader biased implementation */
++static inline int do_read_rt_trylock(rwlock_t *rwlock)
++{
++	return __read_rt_trylock(rwlock);
++}
++
++static inline int do_write_rt_trylock(rwlock_t *rwlock)
++{
++	return __write_rt_trylock(rwlock);
++}
++
++static inline void do_read_rt_lock(rwlock_t *rwlock)
++{
++	__read_rt_lock(rwlock);
++}
++
++static inline void do_write_rt_lock(rwlock_t *rwlock)
++{
++	__write_rt_lock(rwlock);
++}
++
++static inline void do_read_rt_unlock(rwlock_t *rwlock)
++{
++	__read_rt_unlock(rwlock);
++}
++
++static inline void do_write_rt_unlock(rwlock_t *rwlock)
++{
++	__write_rt_unlock(rwlock);
++}
++
++static inline void do_rwlock_rt_init(rwlock_t *rwlock, const char *name,
++				     struct lock_class_key *key)
++{
++	__rwlock_biased_rt_init(rwlock, name, key);
++}
++#endif
++
++/*
++ * The common functions which get wrapped into the rwlock API.
++ */
++int __lockfunc rt_read_trylock(rwlock_t *rwlock)
++{
++	int ret;
++
++	migrate_disable();
++	ret = do_read_rt_trylock(rwlock);
++	if (ret)
++		rwlock_acquire_read(&rwlock->dep_map, 0, 1, _RET_IP_);
++	else
++		migrate_enable();
++	return ret;
++}
++EXPORT_SYMBOL(rt_read_trylock);
++
++int __lockfunc rt_write_trylock(rwlock_t *rwlock)
++{
++	int ret;
++
++	migrate_disable();
++	ret = do_write_rt_trylock(rwlock);
++	if (ret)
++		rwlock_acquire(&rwlock->dep_map, 0, 1, _RET_IP_);
++	else
++		migrate_enable();
++	return ret;
++}
++EXPORT_SYMBOL(rt_write_trylock);
++
++void __lockfunc rt_read_lock(rwlock_t *rwlock)
++{
++	migrate_disable();
++	rwlock_acquire_read(&rwlock->dep_map, 0, 0, _RET_IP_);
++	do_read_rt_lock(rwlock);
++}
++EXPORT_SYMBOL(rt_read_lock);
++
++void __lockfunc rt_write_lock(rwlock_t *rwlock)
++{
++	migrate_disable();
++	rwlock_acquire(&rwlock->dep_map, 0, 0, _RET_IP_);
++	do_write_rt_lock(rwlock);
++}
++EXPORT_SYMBOL(rt_write_lock);
++
++void __lockfunc rt_read_unlock(rwlock_t *rwlock)
++{
++	rwlock_release(&rwlock->dep_map, 1, _RET_IP_);
++	do_read_rt_unlock(rwlock);
++	migrate_enable();
++}
++EXPORT_SYMBOL(rt_read_unlock);
++
++void __lockfunc rt_write_unlock(rwlock_t *rwlock)
++{
++	rwlock_release(&rwlock->dep_map, 1, _RET_IP_);
++	do_write_rt_unlock(rwlock);
++	migrate_enable();
++}
++EXPORT_SYMBOL(rt_write_unlock);
++
++void __rt_rwlock_init(rwlock_t *rwlock, char *name, struct lock_class_key *key)
++{
++	do_rwlock_rt_init(rwlock, name, key);
++}
++EXPORT_SYMBOL(__rt_rwlock_init);
 diff --git a/kernel/locking/rwsem-rt.c b/kernel/locking/rwsem-rt.c
 new file mode 100644
 index 000000000000..c22fe9094df1
@@ -18083,6 +20210,98 @@ index 7eba6dea4f41..6d9988031c5b 100644
  #endif /* CONFIG_SMP */
  
  #define MODINFO_ATTR(field)	\
+diff --git a/kernel/padata.c b/kernel/padata.c
+index f1aef1639204..22d2b6627677 100644
+--- a/kernel/padata.c
++++ b/kernel/padata.c
+@@ -939,29 +939,18 @@ static struct kobj_type padata_attr_type = {
+ };
+ 
+ /**
+- * padata_alloc_possible - Allocate and initialize padata instance.
+- *                         Use the cpu_possible_mask for serial and
+- *                         parallel workers.
+- *
+- * @wq: workqueue to use for the allocated padata instance
+- */
+-struct padata_instance *padata_alloc_possible(struct workqueue_struct *wq)
+-{
+-	return padata_alloc(wq, cpu_possible_mask, cpu_possible_mask);
+-}
+-EXPORT_SYMBOL(padata_alloc_possible);
+-
+-/**
+  * padata_alloc - allocate and initialize a padata instance and specify
+  *                cpumasks for serial and parallel workers.
+  *
+  * @wq: workqueue to use for the allocated padata instance
+  * @pcpumask: cpumask that will be used for padata parallelization
+  * @cbcpumask: cpumask that will be used for padata serialization
++ *
++ * Must be called from a cpus_read_lock() protected region
+  */
+-struct padata_instance *padata_alloc(struct workqueue_struct *wq,
+-				     const struct cpumask *pcpumask,
+-				     const struct cpumask *cbcpumask)
++static struct padata_instance *padata_alloc(struct workqueue_struct *wq,
++					    const struct cpumask *pcpumask,
++					    const struct cpumask *cbcpumask)
+ {
+ 	struct padata_instance *pinst;
+ 	struct parallel_data *pd = NULL;
+@@ -970,7 +959,6 @@ struct padata_instance *padata_alloc(struct workqueue_struct *wq,
+ 	if (!pinst)
+ 		goto err;
+ 
+-	get_online_cpus();
+ 	if (!alloc_cpumask_var(&pinst->cpumask.pcpu, GFP_KERNEL))
+ 		goto err_free_inst;
+ 	if (!alloc_cpumask_var(&pinst->cpumask.cbcpu, GFP_KERNEL)) {
+@@ -994,14 +982,12 @@ struct padata_instance *padata_alloc(struct workqueue_struct *wq,
+ 
+ 	pinst->flags = 0;
+ 
+-	put_online_cpus();
+-
+ 	BLOCKING_INIT_NOTIFIER_HEAD(&pinst->cpumask_change_notifier);
+ 	kobject_init(&pinst->kobj, &padata_attr_type);
+ 	mutex_init(&pinst->lock);
+ 
+ #ifdef CONFIG_HOTPLUG_CPU
+-	cpuhp_state_add_instance_nocalls(hp_online, &pinst->node);
++	cpuhp_state_add_instance_nocalls_cpuslocked(hp_online, &pinst->node);
+ #endif
+ 	return pinst;
+ 
+@@ -1010,12 +996,27 @@ struct padata_instance *padata_alloc(struct workqueue_struct *wq,
+ 	free_cpumask_var(pinst->cpumask.cbcpu);
+ err_free_inst:
+ 	kfree(pinst);
+-	put_online_cpus();
+ err:
+ 	return NULL;
+ }
+ 
+ /**
++ * padata_alloc_possible - Allocate and initialize padata instance.
++ *                         Use the cpu_possible_mask for serial and
++ *                         parallel workers.
++ *
++ * @wq: workqueue to use for the allocated padata instance
++ *
++ * Must be called from a cpus_read_lock() protected region
++ */
++struct padata_instance *padata_alloc_possible(struct workqueue_struct *wq)
++{
++	lockdep_assert_cpus_held();
++	return padata_alloc(wq, cpu_possible_mask, cpu_possible_mask);
++}
++EXPORT_SYMBOL(padata_alloc_possible);
++
++/**
+  * padata_free - free a padata instance
+  *
+  * @padata_inst: padata instance to free
 diff --git a/kernel/panic.c b/kernel/panic.c
 index a58932b41700..7b12efae8ca5 100644
 --- a/kernel/panic.c
@@ -18874,7 +21093,7 @@ index ec62a05bfdb3..3727d8d7c43c 100644
  						 struct rcu_node *rnp);
  #endif /* #ifdef CONFIG_RCU_BOOST */
 diff --git a/kernel/rcu/tree_plugin.h b/kernel/rcu/tree_plugin.h
-index 0a62a8f1caac..47c77c689ba8 100644
+index 6de6eb5da71e..260484a6dd2b 100644
 --- a/kernel/rcu/tree_plugin.h
 +++ b/kernel/rcu/tree_plugin.h
 @@ -24,27 +24,10 @@
@@ -19312,7 +21531,7 @@ index 53f9558fa925..16670945ba0d 100644
  }
  EXPORT_SYMBOL(completion_done);
 diff --git a/kernel/sched/core.c b/kernel/sched/core.c
-index 8119ea560688..450ca2a3b18d 100644
+index 8119ea560688..04254bc67b3d 100644
 --- a/kernel/sched/core.c
 +++ b/kernel/sched/core.c
 @@ -58,7 +58,11 @@ const_debug unsigned int sysctl_sched_features =
@@ -19506,7 +21725,7 @@ index 8119ea560688..450ca2a3b18d 100644
  {
  	struct rq *rq = task_rq(p);
  	bool queued, running;
-@@ -1076,6 +1150,98 @@ void do_set_cpus_allowed(struct task_struct *p, const struct cpumask *new_mask)
+@@ -1076,6 +1150,20 @@ void do_set_cpus_allowed(struct task_struct *p, const struct cpumask *new_mask)
  		set_curr_task(rq, p);
  }
  
@@ -19524,88 +21743,10 @@ index 8119ea560688..450ca2a3b18d 100644
 +	__do_set_cpus_allowed_tail(p, new_mask);
 +}
 +
-+static DEFINE_PER_CPU(struct cpumask, sched_cpumasks);
-+static DEFINE_MUTEX(sched_down_mutex);
-+static cpumask_t sched_down_cpumask;
-+
-+void tell_sched_cpu_down_begin(int cpu)
-+{
-+	mutex_lock(&sched_down_mutex);
-+	cpumask_set_cpu(cpu, &sched_down_cpumask);
-+	mutex_unlock(&sched_down_mutex);
-+}
-+
-+void tell_sched_cpu_down_done(int cpu)
-+{
-+	mutex_lock(&sched_down_mutex);
-+	cpumask_clear_cpu(cpu, &sched_down_cpumask);
-+	mutex_unlock(&sched_down_mutex);
-+}
-+
-+/**
-+ * migrate_me - try to move the current task off this cpu
-+ *
-+ * Used by the pin_current_cpu() code to try to get tasks
-+ * to move off the current CPU as it is going down.
-+ * It will only move the task if the task isn't pinned to
-+ * the CPU (with migrate_disable, affinity or NO_SETAFFINITY)
-+ * and the task has to be in a RUNNING state. Otherwise the
-+ * movement of the task will wake it up (change its state
-+ * to running) when the task did not expect it.
-+ *
-+ * Returns 1 if it succeeded in moving the current task
-+ *         0 otherwise.
-+ */
-+int migrate_me(void)
-+{
-+	struct task_struct *p = current;
-+	struct migration_arg arg;
-+	struct cpumask *cpumask;
-+	const struct cpumask *mask;
-+	unsigned int dest_cpu;
-+	struct rq_flags rf;
-+	struct rq *rq;
-+
-+	/*
-+	 * We can not migrate tasks bounded to a CPU or tasks not
-+	 * running. The movement of the task will wake it up.
-+	 */
-+	if (p->flags & PF_NO_SETAFFINITY || p->state)
-+		return 0;
-+
-+	mutex_lock(&sched_down_mutex);
-+	rq = task_rq_lock(p, &rf);
-+
-+	cpumask = this_cpu_ptr(&sched_cpumasks);
-+	mask = p->cpus_ptr;
-+
-+	cpumask_andnot(cpumask, mask, &sched_down_cpumask);
-+
-+	if (!cpumask_weight(cpumask)) {
-+		/* It's only on this CPU? */
-+		task_rq_unlock(rq, p, &rf);
-+		mutex_unlock(&sched_down_mutex);
-+		return 0;
-+	}
-+
-+	dest_cpu = cpumask_any_and(cpu_active_mask, cpumask);
-+
-+	arg.task = p;
-+	arg.dest_cpu = dest_cpu;
-+
-+	task_rq_unlock(rq, p, &rf);
-+
-+	stop_one_cpu(cpu_of(rq), migration_cpu_stop, &arg);
-+	tlb_migrate_finish(p->mm);
-+	mutex_unlock(&sched_down_mutex);
-+
-+	return 1;
-+}
-+
  /*
   * Change a given task's CPU affinity. Migrate the thread to a
   * proper CPU and schedule it away if the CPU it's executing on
-@@ -1113,7 +1279,7 @@ static int __set_cpus_allowed_ptr(struct task_struct *p,
+@@ -1113,7 +1201,7 @@ static int __set_cpus_allowed_ptr(struct task_struct *p,
  		goto out;
  	}
  
@@ -19614,7 +21755,7 @@ index 8119ea560688..450ca2a3b18d 100644
  		goto out;
  
  	if (!cpumask_intersects(new_mask, cpu_valid_mask)) {
-@@ -1134,9 +1300,16 @@ static int __set_cpus_allowed_ptr(struct task_struct *p,
+@@ -1134,9 +1222,16 @@ static int __set_cpus_allowed_ptr(struct task_struct *p,
  	}
  
  	/* Can the task run on the task's current CPU? If so, we're done */
@@ -19632,7 +21773,7 @@ index 8119ea560688..450ca2a3b18d 100644
  	dest_cpu = cpumask_any_and(cpu_valid_mask, new_mask);
  	if (task_running(rq, p) || p->state == TASK_WAKING) {
  		struct migration_arg arg = { p, dest_cpu };
-@@ -1264,10 +1437,10 @@ static int migrate_swap_stop(void *data)
+@@ -1264,10 +1359,10 @@ static int migrate_swap_stop(void *data)
  	if (task_cpu(arg->src_task) != arg->src_cpu)
  		goto unlock;
  
@@ -19645,7 +21786,7 @@ index 8119ea560688..450ca2a3b18d 100644
  		goto unlock;
  
  	__migrate_swap_task(arg->src_task, arg->dst_cpu);
-@@ -1308,10 +1481,10 @@ int migrate_swap(struct task_struct *cur, struct task_struct *p)
+@@ -1308,10 +1403,10 @@ int migrate_swap(struct task_struct *cur, struct task_struct *p)
  	if (!cpu_active(arg.src_cpu) || !cpu_active(arg.dst_cpu))
  		goto out;
  
@@ -19658,7 +21799,7 @@ index 8119ea560688..450ca2a3b18d 100644
  		goto out;
  
  	trace_sched_swap_numa(cur, arg.src_cpu, p, arg.dst_cpu);
-@@ -1321,6 +1494,18 @@ int migrate_swap(struct task_struct *cur, struct task_struct *p)
+@@ -1321,6 +1416,18 @@ int migrate_swap(struct task_struct *cur, struct task_struct *p)
  	return ret;
  }
  
@@ -19677,7 +21818,7 @@ index 8119ea560688..450ca2a3b18d 100644
  /*
   * wait_task_inactive - wait for a thread to unschedule.
   *
-@@ -1365,7 +1550,7 @@ unsigned long wait_task_inactive(struct task_struct *p, long match_state)
+@@ -1365,7 +1472,7 @@ unsigned long wait_task_inactive(struct task_struct *p, long match_state)
  		 * is actually now running somewhere else!
  		 */
  		while (task_running(rq, p)) {
@@ -19686,7 +21827,7 @@ index 8119ea560688..450ca2a3b18d 100644
  				return 0;
  			cpu_relax();
  		}
-@@ -1380,7 +1565,8 @@ unsigned long wait_task_inactive(struct task_struct *p, long match_state)
+@@ -1380,7 +1487,8 @@ unsigned long wait_task_inactive(struct task_struct *p, long match_state)
  		running = task_running(rq, p);
  		queued = task_on_rq_queued(p);
  		ncsw = 0;
@@ -19696,7 +21837,7 @@ index 8119ea560688..450ca2a3b18d 100644
  			ncsw = p->nvcsw | LONG_MIN; /* sets MSB */
  		task_rq_unlock(rq, p, &rf);
  
-@@ -1455,7 +1641,7 @@ void kick_process(struct task_struct *p)
+@@ -1455,7 +1563,7 @@ void kick_process(struct task_struct *p)
  EXPORT_SYMBOL_GPL(kick_process);
  
  /*
@@ -19705,7 +21846,7 @@ index 8119ea560688..450ca2a3b18d 100644
   *
   * A few notes on cpu_active vs cpu_online:
   *
-@@ -1495,14 +1681,14 @@ static int select_fallback_rq(int cpu, struct task_struct *p)
+@@ -1495,14 +1603,14 @@ static int select_fallback_rq(int cpu, struct task_struct *p)
  		for_each_cpu(dest_cpu, nodemask) {
  			if (!cpu_active(dest_cpu))
  				continue;
@@ -19722,7 +21863,7 @@ index 8119ea560688..450ca2a3b18d 100644
  			if (!(p->flags & PF_KTHREAD) && !cpu_active(dest_cpu))
  				continue;
  			if (!cpu_online(dest_cpu))
-@@ -1547,7 +1733,7 @@ static int select_fallback_rq(int cpu, struct task_struct *p)
+@@ -1547,7 +1655,7 @@ static int select_fallback_rq(int cpu, struct task_struct *p)
  }
  
  /*
@@ -19731,7 +21872,7 @@ index 8119ea560688..450ca2a3b18d 100644
   */
  static inline
  int select_task_rq(struct task_struct *p, int cpu, int sd_flags, int wake_flags)
-@@ -1557,11 +1743,11 @@ int select_task_rq(struct task_struct *p, int cpu, int sd_flags, int wake_flags)
+@@ -1557,11 +1665,11 @@ int select_task_rq(struct task_struct *p, int cpu, int sd_flags, int wake_flags)
  	if (p->nr_cpus_allowed > 1)
  		cpu = p->sched_class->select_task_rq(p, cpu, sd_flags, wake_flags);
  	else
@@ -19745,7 +21886,7 @@ index 8119ea560688..450ca2a3b18d 100644
  	 * CPU.
  	 *
  	 * Since this is common to all placement strategies, this lives here.
-@@ -1569,7 +1755,7 @@ int select_task_rq(struct task_struct *p, int cpu, int sd_flags, int wake_flags)
+@@ -1569,7 +1677,7 @@ int select_task_rq(struct task_struct *p, int cpu, int sd_flags, int wake_flags)
  	 * [ this allows ->select_task() to simply return task_cpu(p) and
  	 *   not worry about this generic constraint ]
  	 */
@@ -19754,7 +21895,7 @@ index 8119ea560688..450ca2a3b18d 100644
  		     !cpu_online(cpu)))
  		cpu = select_fallback_rq(task_cpu(p), p);
  
-@@ -1635,10 +1821,6 @@ static inline void ttwu_activate(struct rq *rq, struct task_struct *p, int en_fl
+@@ -1635,10 +1743,6 @@ static inline void ttwu_activate(struct rq *rq, struct task_struct *p, int en_fl
  {
  	activate_task(rq, p, en_flags);
  	p->on_rq = TASK_ON_RQ_QUEUED;
@@ -19765,7 +21906,7 @@ index 8119ea560688..450ca2a3b18d 100644
  }
  
  /*
-@@ -1974,8 +2156,27 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
+@@ -1974,8 +2078,27 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
  	 */
  	smp_mb__before_spinlock();
  	raw_spin_lock_irqsave(&p->pi_lock, flags);
@@ -19794,7 +21935,7 @@ index 8119ea560688..450ca2a3b18d 100644
  
  	trace_sched_waking(p);
  
-@@ -2072,58 +2273,6 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
+@@ -2072,58 +2195,6 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
  }
  
  /**
@@ -19853,7 +21994,7 @@ index 8119ea560688..450ca2a3b18d 100644
   * wake_up_process - Wake up a specific process
   * @p: The process to be woken up.
   *
-@@ -2141,6 +2290,18 @@ int wake_up_process(struct task_struct *p)
+@@ -2141,6 +2212,18 @@ int wake_up_process(struct task_struct *p)
  }
  EXPORT_SYMBOL(wake_up_process);
  
@@ -19872,7 +22013,7 @@ index 8119ea560688..450ca2a3b18d 100644
  int wake_up_state(struct task_struct *p, unsigned int state)
  {
  	return try_to_wake_up(p, state, 0);
-@@ -2417,6 +2578,9 @@ int sched_fork(unsigned long clone_flags, struct task_struct *p)
+@@ -2417,6 +2500,9 @@ int sched_fork(unsigned long clone_flags, struct task_struct *p)
  	p->on_cpu = 0;
  #endif
  	init_task_preempt_count(p);
@@ -19882,7 +22023,7 @@ index 8119ea560688..450ca2a3b18d 100644
  #ifdef CONFIG_SMP
  	plist_node_init(&p->pushable_tasks, MAX_PRIO);
  	RB_CLEAR_NODE(&p->pushable_dl_tasks);
-@@ -2543,7 +2707,7 @@ void wake_up_new_task(struct task_struct *p)
+@@ -2543,7 +2629,7 @@ void wake_up_new_task(struct task_struct *p)
  #ifdef CONFIG_SMP
  	/*
  	 * Fork balancing, do it here and not earlier because:
@@ -19891,7 +22032,7 @@ index 8119ea560688..450ca2a3b18d 100644
  	 *  - any previously selected CPU might disappear through hotplug
  	 *
  	 * Use __set_task_cpu() to avoid calling sched_class::migrate_task_rq,
-@@ -2746,21 +2910,16 @@ static struct rq *finish_task_switch(struct task_struct *prev)
+@@ -2746,21 +2832,16 @@ static struct rq *finish_task_switch(struct task_struct *prev)
  	finish_arch_post_lock_switch();
  
  	fire_sched_in_preempt_notifiers(current);
@@ -19918,7 +22059,7 @@ index 8119ea560688..450ca2a3b18d 100644
  		put_task_struct(prev);
  	}
  
-@@ -3404,19 +3563,6 @@ static void __sched notrace __schedule(bool preempt)
+@@ -3404,19 +3485,6 @@ static void __sched notrace __schedule(bool preempt)
  				atomic_inc(&rq->nr_iowait);
  				delayacct_blkio_start();
  			}
@@ -19938,7 +22079,7 @@ index 8119ea560688..450ca2a3b18d 100644
  		}
  		switch_count = &prev->nvcsw;
  	}
-@@ -3426,6 +3572,7 @@ static void __sched notrace __schedule(bool preempt)
+@@ -3426,6 +3494,7 @@ static void __sched notrace __schedule(bool preempt)
  
  	next = pick_next_task(rq, prev, &rf);
  	clear_tsk_need_resched(prev);
@@ -19946,7 +22087,7 @@ index 8119ea560688..450ca2a3b18d 100644
  	clear_preempt_need_resched();
  
  	if (likely(prev != next)) {
-@@ -3479,9 +3626,20 @@ void __noreturn do_task_dead(void)
+@@ -3479,9 +3548,20 @@ void __noreturn do_task_dead(void)
  
  static inline void sched_submit_work(struct task_struct *tsk)
  {
@@ -19968,7 +22109,7 @@ index 8119ea560688..450ca2a3b18d 100644
  	 * If we are going to sleep and we have plugged IO queued,
  	 * make sure to submit it to avoid deadlocks.
  	 */
-@@ -3489,6 +3647,12 @@ static inline void sched_submit_work(struct task_struct *tsk)
+@@ -3489,6 +3569,12 @@ static inline void sched_submit_work(struct task_struct *tsk)
  		blk_schedule_flush_plug(tsk);
  }
  
@@ -19981,7 +22122,7 @@ index 8119ea560688..450ca2a3b18d 100644
  asmlinkage __visible void __sched schedule(void)
  {
  	struct task_struct *tsk = current;
-@@ -3499,6 +3663,7 @@ asmlinkage __visible void __sched schedule(void)
+@@ -3499,6 +3585,7 @@ asmlinkage __visible void __sched schedule(void)
  		__schedule(false);
  		sched_preempt_enable_no_resched();
  	} while (need_resched());
@@ -19989,7 +22130,7 @@ index 8119ea560688..450ca2a3b18d 100644
  }
  EXPORT_SYMBOL(schedule);
  
-@@ -3562,6 +3727,30 @@ static void __sched notrace preempt_schedule_common(void)
+@@ -3562,6 +3649,30 @@ static void __sched notrace preempt_schedule_common(void)
  	} while (need_resched());
  }
  
@@ -20020,7 +22161,7 @@ index 8119ea560688..450ca2a3b18d 100644
  #ifdef CONFIG_PREEMPT
  /*
   * this is the entry point to schedule() from in-kernel preemption
-@@ -3576,7 +3765,8 @@ asmlinkage __visible void __sched notrace preempt_schedule(void)
+@@ -3576,7 +3687,8 @@ asmlinkage __visible void __sched notrace preempt_schedule(void)
  	 */
  	if (likely(!preemptible()))
  		return;
@@ -20030,7 +22171,7 @@ index 8119ea560688..450ca2a3b18d 100644
  	preempt_schedule_common();
  }
  NOKPROBE_SYMBOL(preempt_schedule);
-@@ -3603,6 +3793,9 @@ asmlinkage __visible void __sched notrace preempt_schedule_notrace(void)
+@@ -3603,6 +3715,9 @@ asmlinkage __visible void __sched notrace preempt_schedule_notrace(void)
  	if (likely(!preemptible()))
  		return;
  
@@ -20040,7 +22181,7 @@ index 8119ea560688..450ca2a3b18d 100644
  	do {
  		/*
  		 * Because the function tracer can trace preempt_count_sub()
-@@ -3625,7 +3818,16 @@ asmlinkage __visible void __sched notrace preempt_schedule_notrace(void)
+@@ -3625,7 +3740,16 @@ asmlinkage __visible void __sched notrace preempt_schedule_notrace(void)
  		 * an infinite recursion.
  		 */
  		prev_ctx = exception_enter();
@@ -20057,7 +22198,7 @@ index 8119ea560688..450ca2a3b18d 100644
  		exception_exit(prev_ctx);
  
  		preempt_latency_stop(1);
-@@ -3671,10 +3873,25 @@ EXPORT_SYMBOL(default_wake_function);
+@@ -3671,10 +3795,25 @@ EXPORT_SYMBOL(default_wake_function);
  
  #ifdef CONFIG_RT_MUTEXES
  
@@ -20085,7 +22226,7 @@ index 8119ea560688..450ca2a3b18d 100644
   *
   * This function changes the 'effective' priority of a task. It does
   * not touch ->normal_prio like __setscheduler().
-@@ -3682,17 +3899,41 @@ EXPORT_SYMBOL(default_wake_function);
+@@ -3682,17 +3821,41 @@ EXPORT_SYMBOL(default_wake_function);
   * Used by the rt_mutex code to implement priority inheritance
   * logic. Call site only calls if the priority of the task changed.
   */
@@ -20130,7 +22271,7 @@ index 8119ea560688..450ca2a3b18d 100644
  
  	/*
  	 * Idle task boosting is a nono in general. There is one
-@@ -3712,7 +3953,7 @@ void rt_mutex_setprio(struct task_struct *p, int prio)
+@@ -3712,7 +3875,7 @@ void rt_mutex_setprio(struct task_struct *p, int prio)
  		goto out_unlock;
  	}
  
@@ -20139,7 +22280,7 @@ index 8119ea560688..450ca2a3b18d 100644
  	oldprio = p->prio;
  
  	if (oldprio == prio)
-@@ -3736,7 +3977,6 @@ void rt_mutex_setprio(struct task_struct *p, int prio)
+@@ -3736,7 +3899,6 @@ void rt_mutex_setprio(struct task_struct *p, int prio)
  	 *          running task
  	 */
  	if (dl_prio(prio)) {
@@ -20147,7 +22288,7 @@ index 8119ea560688..450ca2a3b18d 100644
  		if (!dl_prio(p->normal_prio) ||
  		    (pi_task && dl_entity_preempt(&pi_task->dl, &p->dl))) {
  			p->dl.dl_boosted = 1;
-@@ -3774,6 +4014,11 @@ void rt_mutex_setprio(struct task_struct *p, int prio)
+@@ -3774,6 +3936,11 @@ void rt_mutex_setprio(struct task_struct *p, int prio)
  	balance_callback(rq);
  	preempt_enable();
  }
@@ -20159,7 +22300,7 @@ index 8119ea560688..450ca2a3b18d 100644
  #endif
  
  void set_user_nice(struct task_struct *p, long nice)
-@@ -4020,10 +4265,9 @@ static void __setscheduler(struct rq *rq, struct task_struct *p,
+@@ -4020,10 +4187,9 @@ static void __setscheduler(struct rq *rq, struct task_struct *p,
  	 * Keep a potential priority boosting if called from
  	 * sched_setscheduler().
  	 */
@@ -20172,7 +22313,7 @@ index 8119ea560688..450ca2a3b18d 100644
  
  	if (dl_prio(p->prio))
  		p->sched_class = &dl_sched_class;
-@@ -4273,7 +4517,7 @@ static int __sched_setscheduler(struct task_struct *p,
+@@ -4273,7 +4439,7 @@ static int __sched_setscheduler(struct task_struct *p,
  			 * the entire root_domain to become SCHED_DEADLINE. We
  			 * will also fail if there's no bandwidth available.
  			 */
@@ -20181,7 +22322,7 @@ index 8119ea560688..450ca2a3b18d 100644
  			    rq->rd->dl_bw.bw == 0) {
  				task_rq_unlock(rq, p, &rf);
  				return -EPERM;
-@@ -4310,7 +4554,7 @@ static int __sched_setscheduler(struct task_struct *p,
+@@ -4310,7 +4476,7 @@ static int __sched_setscheduler(struct task_struct *p,
  		 * the runqueue. This will be done when the task deboost
  		 * itself.
  		 */
@@ -20190,7 +22331,7 @@ index 8119ea560688..450ca2a3b18d 100644
  		if (new_effective_prio == oldprio)
  			queue_flags &= ~DEQUEUE_MOVE;
  	}
-@@ -4867,7 +5111,7 @@ long sched_getaffinity(pid_t pid, struct cpumask *mask)
+@@ -4867,7 +5033,7 @@ long sched_getaffinity(pid_t pid, struct cpumask *mask)
  		goto out_unlock;
  
  	raw_spin_lock_irqsave(&p->pi_lock, flags);
@@ -20199,7 +22340,7 @@ index 8119ea560688..450ca2a3b18d 100644
  	raw_spin_unlock_irqrestore(&p->pi_lock, flags);
  
  out_unlock:
-@@ -4982,6 +5226,7 @@ int __cond_resched_lock(spinlock_t *lock)
+@@ -4982,6 +5148,7 @@ int __cond_resched_lock(spinlock_t *lock)
  }
  EXPORT_SYMBOL(__cond_resched_lock);
  
@@ -20207,7 +22348,7 @@ index 8119ea560688..450ca2a3b18d 100644
  int __sched __cond_resched_softirq(void)
  {
  	BUG_ON(!in_softirq());
-@@ -4995,6 +5240,7 @@ int __sched __cond_resched_softirq(void)
+@@ -4995,6 +5162,7 @@ int __sched __cond_resched_softirq(void)
  	return 0;
  }
  EXPORT_SYMBOL(__cond_resched_softirq);
@@ -20215,7 +22356,7 @@ index 8119ea560688..450ca2a3b18d 100644
  
  /**
   * yield - yield the current processor to other threads.
-@@ -5379,7 +5625,9 @@ void init_idle(struct task_struct *idle, int cpu)
+@@ -5379,7 +5547,9 @@ void init_idle(struct task_struct *idle, int cpu)
  
  	/* Set the preempt count _outside_ the spinlocks! */
  	init_idle_preempt_count(idle, cpu);
@@ -20226,7 +22367,7 @@ index 8119ea560688..450ca2a3b18d 100644
  	/*
  	 * The idle tasks have their own, simple scheduling class:
  	 */
-@@ -5427,7 +5675,7 @@ int task_can_attach(struct task_struct *p,
+@@ -5427,7 +5597,7 @@ int task_can_attach(struct task_struct *p,
  	 * allowed nodes is unnecessary.  Thus, cpusets are not
  	 * applicable for such threads.  This prevents checking for
  	 * success of set_cpus_allowed_ptr() on all attached tasks
@@ -20235,7 +22376,7 @@ index 8119ea560688..450ca2a3b18d 100644
  	 */
  	if (p->flags & PF_NO_SETAFFINITY) {
  		ret = -EINVAL;
-@@ -5483,7 +5731,7 @@ int migrate_task_to(struct task_struct *p, int target_cpu)
+@@ -5483,7 +5653,7 @@ int migrate_task_to(struct task_struct *p, int target_cpu)
  	if (curr_cpu == target_cpu)
  		return 0;
  
@@ -20244,7 +22385,7 @@ index 8119ea560688..450ca2a3b18d 100644
  		return -EINVAL;
  
  	/* TODO: This is not properly updating schedstats */
-@@ -5522,6 +5770,8 @@ void sched_setnuma(struct task_struct *p, int nid)
+@@ -5522,6 +5692,8 @@ void sched_setnuma(struct task_struct *p, int nid)
  #endif /* CONFIG_NUMA_BALANCING */
  
  #ifdef CONFIG_HOTPLUG_CPU
@@ -20253,7 +22394,7 @@ index 8119ea560688..450ca2a3b18d 100644
  /*
   * Ensure that the idle task is using init_mm right before its CPU goes
   * offline.
-@@ -5536,7 +5786,12 @@ void idle_task_exit(void)
+@@ -5536,7 +5708,12 @@ void idle_task_exit(void)
  		switch_mm(mm, &init_mm, current);
  		finish_arch_post_lock_switch();
  	}
@@ -20267,7 +22408,7 @@ index 8119ea560688..450ca2a3b18d 100644
  }
  
  /*
-@@ -5623,7 +5878,7 @@ static void migrate_tasks(struct rq *dead_rq)
+@@ -5623,7 +5800,7 @@ static void migrate_tasks(struct rq *dead_rq)
  		next->sched_class->put_prev_task(rq, next);
  
  		/*
@@ -20276,7 +22417,7 @@ index 8119ea560688..450ca2a3b18d 100644
  		 * both pi_lock and rq->lock, such that holding either
  		 * stabilizes the mask.
  		 *
-@@ -5863,6 +6118,10 @@ int sched_cpu_dying(unsigned int cpu)
+@@ -5863,6 +6040,10 @@ int sched_cpu_dying(unsigned int cpu)
  	update_max_interval();
  	nohz_balance_exit_idle(cpu);
  	hrtick_clear(rq);
@@ -20287,7 +22428,7 @@ index 8119ea560688..450ca2a3b18d 100644
  	return 0;
  }
  #endif
-@@ -6146,7 +6405,7 @@ void __init sched_init(void)
+@@ -6146,7 +6327,7 @@ void __init sched_init(void)
  #ifdef CONFIG_DEBUG_ATOMIC_SLEEP
  static inline int preempt_count_equals(int preempt_offset)
  {
@@ -20296,7 +22437,7 @@ index 8119ea560688..450ca2a3b18d 100644
  
  	return (nested == preempt_offset);
  }
-@@ -6181,8 +6440,10 @@ void ___might_sleep(const char *file, int line, int preempt_offset)
+@@ -6181,8 +6362,10 @@ void ___might_sleep(const char *file, int line, int preempt_offset)
  
  	if ((preempt_count_equals(preempt_offset) && !irqs_disabled() &&
  	     !is_idle_task(current)) ||
@@ -20308,7 +22449,7 @@ index 8119ea560688..450ca2a3b18d 100644
  	if (time_before(jiffies, prev_jiffy + HZ) && prev_jiffy)
  		return;
  	prev_jiffy = jiffies;
-@@ -7313,3 +7574,117 @@ const u32 sched_prio_to_wmult[40] = {
+@@ -7313,3 +7496,113 @@ const u32 sched_prio_to_wmult[40] = {
   /*  10 */  39045157,  49367440,  61356676,  76695844,  95443717,
   /*  15 */ 119304647, 148102320, 186737708, 238609294, 286331153,
  };
@@ -20336,8 +22477,6 @@ index 8119ea560688..450ca2a3b18d 100644
 +		p->migrate_disable++;
 +		return;
 +	}
-+
-+	/* get_online_cpus(); */
 +
 +	preempt_disable();
 +	preempt_lazy_disable();
@@ -20414,13 +22553,11 @@ index 8119ea560688..450ca2a3b18d 100644
 +			preempt_enable();
 +			stop_one_cpu(task_cpu(p), migration_cpu_stop, &arg);
 +			tlb_migrate_finish(p->mm);
-+			/* put_online_cpus(); */
 +
 +			return;
 +		}
 +	}
 +	unpin_current_cpu();
-+	/* put_online_cpus(); */
 +	preempt_lazy_enable();
 +	preempt_enable();
 +}
@@ -20516,7 +22653,7 @@ index 38f019324f1a..0e2af53e4c3e 100644
  #undef PN
  #undef __PN
 diff --git a/kernel/sched/fair.c b/kernel/sched/fair.c
-index dea138964b91..184785bcf174 100644
+index 358c4aa921e7..c8b8d8d38571 100644
 --- a/kernel/sched/fair.c
 +++ b/kernel/sched/fair.c
 @@ -1553,7 +1553,7 @@ static void task_numa_compare(struct task_numa_env *env,
@@ -20600,16 +22737,16 @@ index dea138964b91..184785bcf174 100644
  		if (idle_cpu(i)) {
  			struct rq *rq = cpu_rq(i);
  			struct cpuidle_state *idle = idle_get_state(rq);
-@@ -5719,7 +5719,7 @@ static int select_idle_core(struct task_struct *p, struct sched_domain *sd, int
+@@ -5682,7 +5682,7 @@ static int select_idle_core(struct task_struct *p, struct sched_domain *sd, int
  	if (!test_idle_cores(target, false))
  		return -1;
  
 -	cpumask_and(cpus, sched_domain_span(sd), &p->cpus_allowed);
 +	cpumask_and(cpus, sched_domain_span(sd), p->cpus_ptr);
  
- 	for_each_cpu_wrap(core, cpus, target, wrap) {
+ 	for_each_cpu_wrap(core, cpus, target) {
  		bool idle = true;
-@@ -5753,7 +5753,7 @@ static int select_idle_smt(struct task_struct *p, struct sched_domain *sd, int t
+@@ -5716,7 +5716,7 @@ static int select_idle_smt(struct task_struct *p, struct sched_domain *sd, int t
  		return -1;
  
  	for_each_cpu(cpu, cpu_smt_mask(target)) {
@@ -20618,16 +22755,16 @@ index dea138964b91..184785bcf174 100644
  			continue;
  		if (idle_cpu(cpu))
  			return cpu;
-@@ -5805,7 +5805,7 @@ static int select_idle_cpu(struct task_struct *p, struct sched_domain *sd, int t
+@@ -5768,7 +5768,7 @@ static int select_idle_cpu(struct task_struct *p, struct sched_domain *sd, int t
  	time = local_clock();
  
- 	for_each_cpu_wrap(cpu, sched_domain_span(sd), target, wrap) {
+ 	for_each_cpu_wrap(cpu, sched_domain_span(sd), target) {
 -		if (!cpumask_test_cpu(cpu, &p->cpus_allowed))
 +		if (!cpumask_test_cpu(cpu, p->cpus_ptr))
  			continue;
  		if (idle_cpu(cpu))
  			break;
-@@ -5960,7 +5960,7 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int sd_flag, int wake_f
+@@ -5923,7 +5923,7 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int sd_flag, int wake_f
  	if (sd_flag & SD_BALANCE_WAKE) {
  		record_wakee(p);
  		want_affine = !wake_wide(p) && !wake_cap(p, cpu, prev_cpu)
@@ -20636,7 +22773,7 @@ index dea138964b91..184785bcf174 100644
  	}
  
  	rcu_read_lock();
-@@ -6231,7 +6231,7 @@ static void check_preempt_wakeup(struct rq *rq, struct task_struct *p, int wake_
+@@ -6194,7 +6194,7 @@ static void check_preempt_wakeup(struct rq *rq, struct task_struct *p, int wake_
  	return;
  
  preempt:
@@ -20645,7 +22782,7 @@ index dea138964b91..184785bcf174 100644
  	/*
  	 * Only set the backward buddy when the current task is still
  	 * on the rq. This can happen when a wakeup gets interleaved
-@@ -6693,14 +6693,14 @@ int can_migrate_task(struct task_struct *p, struct lb_env *env)
+@@ -6656,14 +6656,14 @@ int can_migrate_task(struct task_struct *p, struct lb_env *env)
  	/*
  	 * We do not migrate tasks that are:
  	 * 1) throttled_lb_pair, or
@@ -20662,7 +22799,7 @@ index dea138964b91..184785bcf174 100644
  		int cpu;
  
  		schedstat_inc(p->se.statistics.nr_failed_migrations_affine);
-@@ -6720,7 +6720,7 @@ int can_migrate_task(struct task_struct *p, struct lb_env *env)
+@@ -6683,7 +6683,7 @@ int can_migrate_task(struct task_struct *p, struct lb_env *env)
  
  		/* Prevent to re-select dst_cpu via env's cpus */
  		for_each_cpu_and(cpu, env->dst_grpmask, env->cpus) {
@@ -20671,7 +22808,7 @@ index dea138964b91..184785bcf174 100644
  				env->flags |= LBF_DST_PINNED;
  				env->new_dst_cpu = cpu;
  				break;
-@@ -7254,7 +7254,7 @@ check_cpu_capacity(struct rq *rq, struct sched_domain *sd)
+@@ -7217,7 +7217,7 @@ check_cpu_capacity(struct rq *rq, struct sched_domain *sd)
  
  /*
   * Group imbalance indicates (and tries to solve) the problem where balancing
@@ -20680,7 +22817,7 @@ index dea138964b91..184785bcf174 100644
   *
   * Imagine a situation of two groups of 4 cpus each and 4 tasks each with a
   * cpumask covering 1 cpu of the first group and 3 cpus of the second group.
-@@ -7828,7 +7828,7 @@ static struct sched_group *find_busiest_group(struct lb_env *env)
+@@ -7791,7 +7791,7 @@ static struct sched_group *find_busiest_group(struct lb_env *env)
  	/*
  	 * If the busiest group is imbalanced the below checks don't
  	 * work because they assume all things are equal, which typically
@@ -20689,7 +22826,7 @@ index dea138964b91..184785bcf174 100644
  	 */
  	if (busiest->group_type == group_imbalanced)
  		goto force_balance;
-@@ -8213,7 +8213,7 @@ static int load_balance(int this_cpu, struct rq *this_rq,
+@@ -8176,7 +8176,7 @@ static int load_balance(int this_cpu, struct rq *this_rq,
  			 * if the curr task on busiest cpu can't be
  			 * moved to this_cpu
  			 */
@@ -20698,7 +22835,7 @@ index dea138964b91..184785bcf174 100644
  				raw_spin_unlock_irqrestore(&busiest->lock,
  							    flags);
  				env.flags |= LBF_ALL_PINNED;
-@@ -9006,7 +9006,7 @@ static void task_fork_fair(struct task_struct *p)
+@@ -8969,7 +8969,7 @@ static void task_fork_fair(struct task_struct *p)
  		 * 'current' within the tree based on its new key value.
  		 */
  		swap(curr->vruntime, se->vruntime);
@@ -20707,7 +22844,7 @@ index dea138964b91..184785bcf174 100644
  	}
  
  	se->vruntime -= cfs_rq->min_vruntime;
-@@ -9030,7 +9030,7 @@ prio_changed_fair(struct rq *rq, struct task_struct *p, int oldprio)
+@@ -8993,7 +8993,7 @@ prio_changed_fair(struct rq *rq, struct task_struct *p, int oldprio)
  	 */
  	if (rq->curr == p) {
  		if (p->prio > oldprio)
@@ -22237,7 +24374,7 @@ index 744fa611cae0..24f6acb61678 100644
  }
  early_initcall(spawn_ksoftirqd);
 diff --git a/kernel/stop_machine.c b/kernel/stop_machine.c
-index 1eb82661ecdb..043991896b53 100644
+index 1eb82661ecdb..2aa4ce60811c 100644
 --- a/kernel/stop_machine.c
 +++ b/kernel/stop_machine.c
 @@ -36,7 +36,7 @@ struct cpu_stop_done {
@@ -22334,6 +24471,38 @@ index 1eb82661ecdb..043991896b53 100644
  		INIT_LIST_HEAD(&stopper->works);
  	}
  
+@@ -552,7 +554,8 @@ static int __init cpu_stop_init(void)
+ }
+ early_initcall(cpu_stop_init);
+ 
+-static int __stop_machine(cpu_stop_fn_t fn, void *data, const struct cpumask *cpus)
++int stop_machine_cpuslocked(cpu_stop_fn_t fn, void *data,
++			    const struct cpumask *cpus)
+ {
+ 	struct multi_stop_data msdata = {
+ 		.fn = fn,
+@@ -561,6 +564,8 @@ static int __stop_machine(cpu_stop_fn_t fn, void *data, const struct cpumask *cp
+ 		.active_cpus = cpus,
+ 	};
+ 
++	lockdep_assert_cpus_held();
++
+ 	if (!stop_machine_initialized) {
+ 		/*
+ 		 * Handle the case where stop_machine() is called
+@@ -590,9 +595,9 @@ int stop_machine(cpu_stop_fn_t fn, void *data, const struct cpumask *cpus)
+ 	int ret;
+ 
+ 	/* No CPUs can come up or down during this. */
+-	get_online_cpus();
+-	ret = __stop_machine(fn, data, cpus);
+-	put_online_cpus();
++	cpus_read_lock();
++	ret = stop_machine_cpuslocked(fn, data, cpus);
++	cpus_read_unlock();
+ 	return ret;
+ }
+ EXPORT_SYMBOL_GPL(stop_machine);
 diff --git a/kernel/time/hrtimer.c b/kernel/time/hrtimer.c
 index ec08f527d7ee..55839ff2bba6 100644
 --- a/kernel/time/hrtimer.c
@@ -29073,10 +31242,10 @@ index 21ea6ae77d93..0cdf70878312 100644
  
  	get_online_cpus();
 diff --git a/kernel/trace/trace_kprobe.c b/kernel/trace/trace_kprobe.c
-index 49cdda852165..068ac86b932c 100644
+index f0e993949e76..b49e21936f1a 100644
 --- a/kernel/trace/trace_kprobe.c
 +++ b/kernel/trace/trace_kprobe.c
-@@ -878,8 +878,8 @@ static int probes_open(struct inode *inode, struct file *file)
+@@ -873,8 +873,8 @@ static int probes_open(struct inode *inode, struct file *file)
  static ssize_t probes_write(struct file *file, const char __user *buffer,
  			    size_t count, loff_t *ppos)
  {
@@ -29087,7 +31256,7 @@ index 49cdda852165..068ac86b932c 100644
  }
  
  static const struct file_operations kprobe_events_ops = {
-@@ -1404,9 +1404,9 @@ static __init int kprobe_trace_self_tests_init(void)
+@@ -1399,9 +1399,9 @@ static __init int kprobe_trace_self_tests_init(void)
  
  	pr_info("Testing kprobe tracing: ");
  
@@ -29100,7 +31269,7 @@ index 49cdda852165..068ac86b932c 100644
  	if (WARN_ON_ONCE(ret)) {
  		pr_warn("error on probing function entry.\n");
  		warn++;
-@@ -1426,8 +1426,8 @@ static __init int kprobe_trace_self_tests_init(void)
+@@ -1421,8 +1421,8 @@ static __init int kprobe_trace_self_tests_init(void)
  		}
  	}
  
@@ -29111,7 +31280,7 @@ index 49cdda852165..068ac86b932c 100644
  	if (WARN_ON_ONCE(ret)) {
  		pr_warn("error on probing function return.\n");
  		warn++;
-@@ -1497,13 +1497,13 @@ static __init int kprobe_trace_self_tests_init(void)
+@@ -1492,13 +1492,13 @@ static __init int kprobe_trace_self_tests_init(void)
  			disable_trace_kprobe(tk, file);
  	}
  
@@ -30931,11 +33100,11 @@ index 690d75b132fa..de3b2d925473 100644
  	/*
 diff --git a/localversion-rt b/localversion-rt
 new file mode 100644
-index 000000000000..045478966e9f
+index 000000000000..22746d6390a4
 --- /dev/null
 +++ b/localversion-rt
 @@ -0,0 +1 @@
-+-rt7
++-rt9
 diff --git a/mm/Kconfig b/mm/Kconfig
 index 9b8fccb969dc..f64e1f40f68c 100644
 --- a/mm/Kconfig
@@ -32832,7 +35001,7 @@ index 102f781a0131..88a142773860 100644
  config BQL
  	bool
 diff --git a/net/core/dev.c b/net/core/dev.c
-index 9debc1b26ce9..f11647223d0c 100644
+index 84d27d3145f9..778eef4feb4b 100644
 --- a/net/core/dev.c
 +++ b/net/core/dev.c
 @@ -189,6 +189,7 @@ static unsigned int napi_gen_id = NR_CPUS;
@@ -33070,7 +35239,7 @@ index 9debc1b26ce9..f11647223d0c 100644
  }
  
  static void flush_all_backlogs(void)
-@@ -4822,6 +4837,7 @@ static void net_rps_action_and_irq_enable(struct softnet_data *sd)
+@@ -4832,6 +4847,7 @@ static void net_rps_action_and_irq_enable(struct softnet_data *sd)
  		sd->rps_ipi_list = NULL;
  
  		local_irq_enable();
@@ -33078,7 +35247,7 @@ index 9debc1b26ce9..f11647223d0c 100644
  
  		/* Send pending IPI's to kick RPS processing on remote cpus. */
  		while (remsd) {
-@@ -4835,6 +4851,7 @@ static void net_rps_action_and_irq_enable(struct softnet_data *sd)
+@@ -4845,6 +4861,7 @@ static void net_rps_action_and_irq_enable(struct softnet_data *sd)
  	} else
  #endif
  		local_irq_enable();
@@ -33086,7 +35255,7 @@ index 9debc1b26ce9..f11647223d0c 100644
  }
  
  static bool sd_has_rps_ipi_waiting(struct softnet_data *sd)
-@@ -4864,7 +4881,9 @@ static int process_backlog(struct napi_struct *napi, int quota)
+@@ -4874,7 +4891,9 @@ static int process_backlog(struct napi_struct *napi, int quota)
  	while (again) {
  		struct sk_buff *skb;
  
@@ -33096,7 +35265,7 @@ index 9debc1b26ce9..f11647223d0c 100644
  			rcu_read_lock();
  			__netif_receive_skb(skb);
  			rcu_read_unlock();
-@@ -4872,9 +4891,9 @@ static int process_backlog(struct napi_struct *napi, int quota)
+@@ -4882,9 +4901,9 @@ static int process_backlog(struct napi_struct *napi, int quota)
  			if (++work >= quota)
  				return work;
  
@@ -33107,7 +35276,7 @@ index 9debc1b26ce9..f11647223d0c 100644
  		rps_lock(sd);
  		if (skb_queue_empty(&sd->input_pkt_queue)) {
  			/*
-@@ -4912,6 +4931,7 @@ void __napi_schedule(struct napi_struct *n)
+@@ -4922,6 +4941,7 @@ void __napi_schedule(struct napi_struct *n)
  	local_irq_save(flags);
  	____napi_schedule(this_cpu_ptr(&softnet_data), n);
  	local_irq_restore(flags);
@@ -33115,7 +35284,7 @@ index 9debc1b26ce9..f11647223d0c 100644
  }
  EXPORT_SYMBOL(__napi_schedule);
  
-@@ -4948,6 +4968,7 @@ bool napi_schedule_prep(struct napi_struct *n)
+@@ -4958,6 +4978,7 @@ bool napi_schedule_prep(struct napi_struct *n)
  }
  EXPORT_SYMBOL(napi_schedule_prep);
  
@@ -33123,7 +35292,7 @@ index 9debc1b26ce9..f11647223d0c 100644
  /**
   * __napi_schedule_irqoff - schedule for receive
   * @n: entry to schedule
-@@ -4959,6 +4980,7 @@ void __napi_schedule_irqoff(struct napi_struct *n)
+@@ -4969,6 +4990,7 @@ void __napi_schedule_irqoff(struct napi_struct *n)
  	____napi_schedule(this_cpu_ptr(&softnet_data), n);
  }
  EXPORT_SYMBOL(__napi_schedule_irqoff);
@@ -33131,7 +35300,7 @@ index 9debc1b26ce9..f11647223d0c 100644
  
  bool napi_complete_done(struct napi_struct *n, int work_done)
  {
-@@ -5060,8 +5082,6 @@ static void busy_poll_stop(struct napi_struct *napi, void *have_poll_lock)
+@@ -5070,8 +5092,6 @@ static void busy_poll_stop(struct napi_struct *napi, void *have_poll_lock)
  	if (rc == BUSY_POLL_BUDGET)
  		__napi_schedule(napi);
  	local_bh_enable();
@@ -33140,7 +35309,7 @@ index 9debc1b26ce9..f11647223d0c 100644
  }
  
  bool sk_busy_loop(struct sock *sk, int nonblock)
-@@ -5316,13 +5336,21 @@ static __latent_entropy void net_rx_action(struct softirq_action *h)
+@@ -5326,13 +5346,21 @@ static __latent_entropy void net_rx_action(struct softirq_action *h)
  	struct softnet_data *sd = this_cpu_ptr(&softnet_data);
  	unsigned long time_limit = jiffies + 2;
  	int budget = netdev_budget;
@@ -33162,7 +35331,7 @@ index 9debc1b26ce9..f11647223d0c 100644
  	for (;;) {
  		struct napi_struct *n;
  
-@@ -5352,7 +5380,7 @@ static __latent_entropy void net_rx_action(struct softirq_action *h)
+@@ -5362,7 +5390,7 @@ static __latent_entropy void net_rx_action(struct softirq_action *h)
  	list_splice_tail(&repoll, &list);
  	list_splice(&list, &sd->poll_list);
  	if (!list_empty(&sd->poll_list))
@@ -33171,7 +35340,7 @@ index 9debc1b26ce9..f11647223d0c 100644
  
  	net_rps_action_and_irq_enable(sd);
  out:
-@@ -8076,16 +8104,20 @@ static int dev_cpu_dead(unsigned int oldcpu)
+@@ -8086,16 +8114,20 @@ static int dev_cpu_dead(unsigned int oldcpu)
  
  	raise_softirq_irqoff(NET_TX_SOFTIRQ);
  	local_irq_enable();
@@ -33193,7 +35362,7 @@ index 9debc1b26ce9..f11647223d0c 100644
  
  	return 0;
  }
-@@ -8389,8 +8421,9 @@ static int __init net_dev_init(void)
+@@ -8399,8 +8431,9 @@ static int __init net_dev_init(void)
  
  		INIT_WORK(flush, flush_backlog);
  
@@ -33725,7 +35894,7 @@ index 7d921e56e715..13df56a738e5 100644
  	[RXRPC_SECURITY_NONE]	= &rxrpc_no_security,
  #ifdef CONFIG_RXKAD
 diff --git a/net/sched/sch_api.c b/net/sched/sch_api.c
-index bcf49cd22786..e504c460b1f8 100644
+index 6ca1db73d1d1..a80f7d9c972a 100644
 --- a/net/sched/sch_api.c
 +++ b/net/sched/sch_api.c
 @@ -980,7 +980,7 @@ static struct Qdisc *qdisc_create(struct net_device *dev,
