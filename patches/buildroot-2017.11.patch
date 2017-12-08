@@ -1,0 +1,26 @@
+--- buildroot-2017.11.orig/board/raspberrypi3-64/genimage-raspberrypi3-64.cfg	2017-11-30 22:35:17.000000000 +0100
++++ buildroot-2017.11/board/raspberrypi3-64/genimage-raspberrypi3-64.cfg	2017-12-06 17:21:15.140339522 +0100
+@@ -1,7 +1,8 @@
+ image boot.vfat {
+   vfat {
+     files = {
+-      "bcm2710-rpi-3-b.dtb",
++      "u-boot.bin",
++      "boot.scr",
+       "bcm2837-rpi-3-b.dtb",
+       "rpi-firmware/bootcode.bin",
+       "rpi-firmware/cmdline.txt",
+--- buildroot-2017.11.orig/board/raspberrypi3/genimage-raspberrypi3.cfg	2017-11-30 22:35:17.000000000 +0100
++++ buildroot-2017.11/board/raspberrypi3/genimage-raspberrypi3.cfg	2017-12-06 17:23:56.853730864 +0100
+@@ -1,8 +1,9 @@
+ image boot.vfat {
+   vfat {
+     files = {
+-      "bcm2710-rpi-3-b.dtb",
+-      "bcm2710-rpi-cm3.dtb",
++      "u-boot.bin",
++      "boot.scr",
++      "bcm2837-rpi-3-b.dtb",
+       "rpi-firmware/bootcode.bin",
+       "rpi-firmware/cmdline.txt",
+       "rpi-firmware/config.txt",

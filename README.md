@@ -5,58 +5,55 @@ Buildroot development tree
 ## Boards
 
 Following custom boards are supported:
-- Raspberry Pi 3 64-bit (4.12.x, 4.11.x-RT and 4.9.x-RT kernels);
-- Raspberry Pi 3 32-bit (4.12.x, 4.11.x-RT, 4.9.x-RT and rpi-4.1.y-ipipe kernels).
+- Raspberry Pi 3 64-bit (4.14.x, 4.14.x-RT);
+- Raspberry Pi 3 32-bit (4.14.x, 4.14.x-RT and 4.9.x-ipipe kernels).
 
 ## How to use
 
-Untar the buildroot package:
+Untar the buildroot package and patch it:
 
-`tar -xjvf dl/buildroot-2017.05.tar.bz2`
-
-`cd buildroot-2017.05`
-
-`patch -p1 < board/raspberry3/patches/buildroot-2017.05-genimage.patch`
-
-`patch -p1 < board/raspberry3/patches/buildroot-2017.05-xenomai.patch`
-
-`patch -p1 < board/raspberry3-64/patches/buildroot-2017.05-genimage.patch`
+"""
+tar -xjvf dl/buildroot-2017.11.tar.bz2
+patch -p0 < ./patches/buildroot-2017.11.patch
+cd buildroot-2017.11
+"""
 
 Build a 32-bit toolchain:
-
-`cp ../board/raspberrypi3/001-buildroot-toolchain.cfg ./.config && make`
+"""
+cp ../configs/001_raspberrypi3_toolchain_defconfig ./.config
+make
+"""
 
 Build a 64-bit toolchain:
+"""
+cp ../configs/001_raspberrypi3_64_toolchain_defconfig ./.config
+make
+"""
 
-`cp ../board/raspberrypi3-64/001-buildroot-toolchain.cfg ./.config && make`
-
-Build 32-bit Xenomai toolchain (needs 4.1 kernel headers):
-
-`cp ../board/raspberrypi3/006-buildroot-toolchain-4.1.cfg ./.config && make`
-
-Once done, copy a configuration to build a system.
+Once done, copy a configuration and build it.
 
 Example for 32-bit:
-
-`cp ../board/raspberrypi3/002-buildroot-minimal.cfg ./.config && make`
+"""
+cp ../configs/004_raspberrypi3_wifi_defconfig ./.config
+make
+"""
 
 Example for 64-bit:
-
-`cp ../board/raspberrypi3-64/002-buildroot-minimal.cfg ./.config && make`
-
-Build the system:
-
-`make`
+"""
+cp ../configs/004_raspberrypi3_64_wifi_defconfig ./.config
+make
+"""
 
 ## Configurations
 
 For 32-bit and 64-bit:
-* 002-minimal.cfg: very minimal system (serial, login, ...);
-* 003-buildroot-ovl-users-devices-ssh.cfg: basic system (ssh, 1 user, special permissions, fstab, load /etc/modules, ...).
-* 004-buildroot-rt.cfg: same as 003-buildroot-ovl-users-devices-ssh.cfg but with a 4.9.x kernel with PREEMPT-RT patch as well as rt-tests and ltp packages;
+* 002_*_minimal_defconfig: very minimal system (serial, login, ...);
+* 003_*_basic_defconfig : basic system (ssh, 1 user, special permissions, fstab, load /etc/modules, ...).
+* 004_*_wifi_defconfig : same as 003_*_basic_defconfig with Wi-Fi support.
+* 005_*_rt_defconfig: same as 004_*_wifi_defconfig with PREEMPT-RT kernel as well as rt-tests and ltp packages;
 
 For 32-bit only:
-* 005-buildroot-xenomai.cfg: same as 003-buildroot-ovl-users-devices-ssh.cfg but with rpi-4.1.y-ipipe kernel with Xenomai.
+* 006_*_xenomai_defconfig: same as 004_*_wifi_defconfig but with I-Pipe/Xenomai 4.9.x kernel.
 
 ## SD card setup
 
