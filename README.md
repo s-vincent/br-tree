@@ -12,37 +12,41 @@ Following custom boards are supported:
 
 Untar the buildroot package and patch it:
 
-"""
+```
 tar -xjvf dl/buildroot-2017.11.tar.bz2
 patch -p0 < ./patches/buildroot-2017.11.patch
 cd buildroot-2017.11
-"""
+```
 
 Build a 32-bit toolchain:
-"""
+
+```
 cp ../configs/001_raspberrypi3_toolchain_defconfig ./.config
 make
-"""
+```
 
 Build a 64-bit toolchain:
-"""
+
+```
 cp ../configs/001_raspberrypi3_64_toolchain_defconfig ./.config
 make
-"""
+```
 
 Once done, copy a configuration and build it.
 
 Example for 32-bit:
-"""
+
+```
 cp ../configs/004_raspberrypi3_wifi_defconfig ./.config
 make
-"""
+```
 
 Example for 64-bit:
-"""
+
+```
 cp ../configs/004_raspberrypi3_64_wifi_defconfig ./.config
 make
-"""
+```
 
 ## Configurations
 
