@@ -102,20 +102,20 @@ For BeagleBone Black:
 ### Raspberry Pi 3
 
 For 32-bit and 64-bit:
-* 002_raspberrypi3_*minimal_defconfig: very minimal system (serial, login, ...);
-* 003_raspberrypi3_*basic_defconfig: basic system (ssh, 1 user, special permissions, fstab, load /etc/modules, ...).
-* 004_raspberrypi3_*wifi_defconfig: same as 003_*_basic_defconfig with Wi-Fi support.
-* 005_raspberrypi3_*rt_defconfig: same as 004_*_wifi_defconfig with PREEMPT-RT kernel as well as rt-tests and ltp packages.
+* 002_raspberrypi3*_minimal_defconfig: very minimal system (serial, login, ...);
+* 003_raspberrypi3*_basic_defconfig: basic system (ssh, 1 user, special permissions, fstab, load /etc/modules, ...).
+* 004_raspberrypi3*_wifi_defconfig: same as basic system with Wi-Fi support;
+* 005_raspberrypi3*_rt_defconfig: same as basic/wifi system with PREEMPT-RT kernel as well as rt-tests and ltp packages.
 
 For 32-bit only:
-* 006_raspberrypi3_xenomai_defconfig: same as 004_*_wifi_defconfig but with I-Pipe/Xenomai 4.9.x kernel.
+* 006_raspberrypi3_xenomai_defconfig: same as basic/wifi system but with I-Pipe/Xenomai 4.9.x kernel.
 
 ### BeagleBone Black
 
 * 002_beaglebone_minimal_defconfig: very minimal system (serial, login, ...);
 * 003_beaglebone_basic_defconfig: basic system (ssh, 1 user, special permissions, fstab, load /etc/modules, ...).
-* 004_beaglebone_rt_defconfig: same as 003_*_basic_defconfig with PREEMPT-RT kernel as well as rt-tests and ltp packages;
-* 005_beaglebone_xenomai_defconfig: same as 003_*_basic_defconfig but with I-Pipe/Xenomai 4.9.x kernel.
+* 004_beaglebone_rt_defconfig: same as basic system with PREEMPT-RT kernel as well as rt-tests and ltp packages;
+* 005_beaglebone_xenomai_defconfig: same as basic system but with I-Pipe/Xenomai 4.9.x kernel.
 
 ## Links
 
