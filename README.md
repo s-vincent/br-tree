@@ -6,7 +6,8 @@ Buildroot development tree
 
 Following custom boards are supported:
 - Raspberry Pi 3 64-bit (4.14.x, 4.14.x-RT);
-- Raspberry Pi 3 32-bit (4.14.x, 4.14.x-RT and 4.9.x-ipipe kernels).
+- Raspberry Pi 3 32-bit (4.14.x, 4.14.x-RT and 4.9.x-ipipe kernels);
+- BeagleBone Black (4.14.x, 4.14.x-RT and 4.9.x-ipipe kernels).
 
 ## How to use
 
@@ -17,6 +18,8 @@ tar -xjvf dl/buildroot-2017.11.tar.bz2
 patch -p0 < ./patches/buildroot-2017.11.patch
 cd buildroot-2017.11
 ```
+
+### Raspberry Pi 3
 
 Build a 32-bit toolchain:
 
@@ -48,16 +51,23 @@ cp ../configs/004_raspberrypi3_64_wifi_defconfig ./.config
 make
 ```
 
-## Configurations
+### BeagleBone Black
 
-For 32-bit and 64-bit:
-* 002_*_minimal_defconfig: very minimal system (serial, login, ...);
-* 003_*_basic_defconfig : basic system (ssh, 1 user, special permissions, fstab, load /etc/modules, ...).
-* 004_*_wifi_defconfig : same as 003_*_basic_defconfig with Wi-Fi support.
-* 005_*_rt_defconfig: same as 004_*_wifi_defconfig with PREEMPT-RT kernel as well as rt-tests and ltp packages;
+Build a toolchain:
 
-For 32-bit only:
-* 006_*_xenomai_defconfig: same as 004_*_wifi_defconfig but with I-Pipe/Xenomai 4.9.x kernel.
+```
+cp ../configs/001_beaglebone_toolchain_defconfig ./.config
+make
+```
+
+Once done, copy a configuration and build it.
+
+Example for 32-bit:
+
+```
+cp ../configs/003_beaglebone_basic_defconfig ./.config
+make
+```
 
 ## SD card setup
 
@@ -77,9 +87,35 @@ Assuming your SD card is /dev/mmcblk0 (or else change it!):
 
 ## Installation
 
-To install the firmware into the SD card:
+To install the firmware into the SD card, use the following.
 
-`sudo ../scripts/install_sd.sh`
+For Raspberry Pi 3:
+
+`sudo ../scripts/install_rpi3_sd.sh`
+
+For BeagleBone Black:
+
+`sudo ../scripts/install_beaglebone_sd.sh`
+
+## Configurations
+
+### Raspberry Pi 3
+
+For 32-bit and 64-bit:
+* 002_raspberrypi3_*minimal_defconfig: very minimal system (serial, login, ...);
+* 003_raspberrypi3_*basic_defconfig: basic system (ssh, 1 user, special permissions, fstab, load /etc/modules, ...).
+* 004_raspberrypi3_*wifi_defconfig: same as 003_*_basic_defconfig with Wi-Fi support.
+* 005_raspberrypi3_*rt_defconfig: same as 004_*_wifi_defconfig with PREEMPT-RT kernel as well as rt-tests and ltp packages.
+
+For 32-bit only:
+* 006_raspberrypi3_xenomai_defconfig: same as 004_*_wifi_defconfig but with I-Pipe/Xenomai 4.9.x kernel.
+
+### BeagleBone Black
+
+* 002_beaglebone_minimal_defconfig: very minimal system (serial, login, ...);
+* 003_beaglebone_basic_defconfig: basic system (ssh, 1 user, special permissions, fstab, load /etc/modules, ...).
+* 004_beaglebone_rt_defconfig: same as 003_*_basic_defconfig with PREEMPT-RT kernel as well as rt-tests and ltp packages;
+* 005_beaglebone_xenomai_defconfig: same as 003_*_basic_defconfig but with I-Pipe/Xenomai 4.9.x kernel.
 
 ## Links
 
