@@ -1,0 +1,1 @@
+beaglebone -1 beaglebone -1 =beaglebone /home/beaglebone /bin/sh - BeagleBone user
