@@ -7,7 +7,8 @@ Buildroot development tree
 Following custom boards are supported:
 - Raspberry Pi 3 64-bit (4.14.x, 4.14.x-RT);
 - Raspberry Pi 3 32-bit (4.14.x, 4.14.x-RT and 4.9.x-ipipe kernels);
-- BeagleBone Black (4.14.x, 4.14.x-RT and 4.9.x-ipipe kernels).
+- BeagleBone Black (4.14.x, 4.14.x-RT and 4.9.x-ipipe kernels);
+- Olinuxino Lime2 (4.14.x, 4.14.x-RT).
 
 ## How to use
 
@@ -62,10 +63,24 @@ make
 
 Once done, copy a configuration and build it.
 
-Example for 32-bit:
-
 ```
 cp ../configs/003_beaglebone_basic_defconfig ./.config
+make
+```
+
+### Olinuxino Lime2
+
+Build a toolchain:
+
+```
+cp ../configs/001_olinuxino_lime2_toolchain_defconfig ./.config
+make
+```
+
+Once done, copy a configuration and build it.
+
+```
+cp ../configs/003_olinuxino_lime2_basic_defconfig ./.config
 make
 ```
 
@@ -97,6 +112,10 @@ For BeagleBone Black:
 
 `sudo ../scripts/install_beaglebone_sd.sh`
 
+For Olinuxino Lime2: 
+
+`sudo sudo dd if=./output/images/sdcard.img of=/dev/mmcblk0; sync;`
+
 ## Configurations
 
 ### Raspberry Pi 3
@@ -116,6 +135,12 @@ For 32-bit only:
 * 003_beaglebone_basic_defconfig: basic system (ssh, 1 user, special permissions, fstab, load /etc/modules, ...).
 * 004_beaglebone_rt_defconfig: same as basic system with PREEMPT-RT kernel as well as rt-tests and ltp packages;
 * 005_beaglebone_xenomai_defconfig: same as basic system but with I-Pipe/Xenomai 4.9.x kernel.
+
+### Olinuxino Lime2
+
+* 002_olinuxino_lime2_minimal_defconfig: very minimal system (serial, login, ...);
+* 003_olinuxino_lime2_basic_defconfig: basic system (ssh, 1 user, special permissions, fstab, load /etc/modules, ...).
+* 004_olinuxino_lime2_rt_defconfig: same as basic system with PREEMPT-RT kernel as well as rt-tests and ltp packages;
 
 ## Links
 
