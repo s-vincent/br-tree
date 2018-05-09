@@ -15,9 +15,9 @@ Following custom boards are supported:
 Untar the buildroot package and patch it:
 
 ```
-tar -xjvf dl/buildroot-2017.11.tar.bz2
-patch -p0 < ./patches/buildroot-2017.11.patch
-cd buildroot-2017.11
+tar -xjvf dl/buildroot-2018.02.2.tar.bz2
+cd buildroot-2018.02.2
+patch -p1 < ../patches/buildroot-2018.02.patch
 ```
 
 ### Raspberry Pi 3
