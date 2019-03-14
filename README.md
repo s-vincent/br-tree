@@ -18,7 +18,7 @@ Untar the buildroot package and patch it:
 tar -xjvf dl/buildroot-2019.02.tar.bz2
 cd buildroot-2019.02
 patch -p1 < ../patches/buildroot-2018.02.patch
-cp ../patches/0002-demos-prevent-unterminated-destination-buffer-with-strncpy.patch ./packages/xenomai/
+cp ../patches/0002-demos-prevent-unterminated-destination-buffer-with-strncpy.patch ./package/xenomai/
 ```
 
 ### Raspberry Pi 3
