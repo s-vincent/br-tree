@@ -15,9 +15,10 @@ Following custom boards are supported:
 Untar the buildroot package and patch it:
 
 ```
-tar -xjvf dl/buildroot-2018.02.2.tar.bz2
-cd buildroot-2018.02.2
+tar -xjvf dl/buildroot-2019.02.tar.bz2
+cd buildroot-2019.02
 patch -p1 < ../patches/buildroot-2018.02.patch
+cp ../patches/0002-demos-prevent-unterminated-destination-buffer-with-strncpy.patch ./packages/xenomai/
 ```
 
 ### Raspberry Pi 3
@@ -26,14 +27,14 @@ Build a 32-bit toolchain:
 
 ```
 cp ../configs/001_raspberrypi3_toolchain_defconfig ./.config
-make
+make toolchain
 ```
 
 Build a 64-bit toolchain:
 
 ```
 cp ../configs/001_raspberrypi3_64_toolchain_defconfig ./.config
-make
+make toolchain
 ```
 
 Once done, copy a configuration and build it.
@@ -58,7 +59,7 @@ Build a toolchain:
 
 ```
 cp ../configs/001_beaglebone_toolchain_defconfig ./.config
-make
+make toolchain
 ```
 
 Once done, copy a configuration and build it.
@@ -74,7 +75,7 @@ Build a toolchain:
 
 ```
 cp ../configs/001_olinuxino_lime2_toolchain_defconfig ./.config
-make
+make toolchain
 ```
 
 Once done, copy a configuration and build it.

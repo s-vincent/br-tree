@@ -1,0 +1,29 @@
+--- a/board/raspberrypi3/genimage-raspberrypi3-64.cfg	2019-03-14 07:05:43.726561226 +0100
++++ b/board/raspberrypi3/genimage-raspberrypi3-64.cfg	2019-03-14 07:12:21.894869063 +0100
+@@ -1,9 +1,9 @@
+ image boot.vfat {
+   vfat {
+     files = {
+-      "bcm2710-rpi-3-b.dtb",
+-      "bcm2710-rpi-3-b-plus.dtb",
++      "u-boot.bin",
++      "boot.scr",
+       "bcm2837-rpi-3-b.dtb",
+       "rpi-firmware/bootcode.bin",
+       "rpi-firmware/cmdline.txt",
+       "rpi-firmware/config.txt",
+--- a/board/raspberrypi3/genimage-raspberrypi3.cfg	2019-03-14 07:05:49.194510811 +0100
++++ b/board/raspberrypi3/genimage-raspberrypi3.cfg	2019-03-14 07:11:17.763466058 +0100
+@@ -1,9 +1,9 @@
+ image boot.vfat {
+   vfat {
+     files = {
+-      "bcm2710-rpi-3-b.dtb",
+-      "bcm2710-rpi-3-b-plus.dtb",
+-      "bcm2710-rpi-cm3.dtb",
++      "u-boot.bin",
++      "boot.scr",
++      "bcm2837-rpi-3-b.dtb",
+       "rpi-firmware/bootcode.bin",
+       "rpi-firmware/cmdline.txt",
+       "rpi-firmware/config.txt",
