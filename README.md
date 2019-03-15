@@ -115,7 +115,7 @@ For BeagleBone Black:
 
 For Olinuxino Lime2: 
 
-`sudo sudo dd if=./output/images/sdcard.img of=/dev/mmcblk0; sync;`
+`sudo dd if=./output/images/sdcard.img of=/dev/mmcblk0; sync;`
 
 ## Configurations
 
